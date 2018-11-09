@@ -2376,25 +2376,29 @@ sub fetch_by_spdi_notation{
   ########################### Check & split input ########################### 
   my ($sequence_id, $position, $deleted_seq, $inserted_seq) = split /:/, $spdi; 
 
-  # strip version number from reference 
-  if($sequence_id =~ m/\./i){
-    $sequence_id =~ s/\.\d+//g;
-  } 
-
-  # count number of fields  
+  # count number of elements   
   my $count_separator = () = $spdi =~ m/\:/g; 
 
   throw ("Could not parse the SPDI notation $spdi")
     unless ($count_separator == 3);  
 
+  # strip version number from reference 
+  if($sequence_id =~ m/\./i){
+    $sequence_id =~ s/\.\d+//g;
+  } 
+
   # check if position is a number 
   my $check_position = $position =~ m/^\d+\z/i; 
 
-  # check deleted sequence (number, string, +, - or empty)  
-  my $check_deleted_seq = $deleted_seq =~ m/^(\d+|\+|\-|([A-Z]+))/i;  
+  # check deleted sequence (number, string)   
+  my $check_deleted_seq = $deleted_seq =~ m/^\w+$/;
+  # check deleted sequence (string)  
+  my $check_deleted_seq_letters = $deleted_seq =~ m/^([A-Z]+)$/i;  
 
-  # check inserted sequence (number, string, +, - or empty) 
-  my $check_inserted_seq = $inserted_seq =~ m/^(\d+|([A-Z]+))/i; 
+  # check inserted sequence (number, string) 
+  my $check_inserted_seq = $inserted_seq =~ m/^\w+$/;
+  # check inserted sequence (string) 
+  my $check_inserted_seq_letters = $inserted_seq =~ m/^([A-Z]+)$/i;  
 
   throw ("Could not parse the SPDI notation $spdi")  
     unless (defined($sequence_id) && $sequence_id ne '' && defined($position) && $check_position ne '' && $position ne '' && defined($deleted_seq) && defined($inserted_seq) 
@@ -2411,13 +2415,13 @@ sub fetch_by_spdi_notation{
   my $slice = $slice_adaptor->fetch_by_region('chromosome', $sequence_id ) || $slice_adaptor->fetch_by_region(undef, $sequence_id);  
 
   # Variation is a substitution  
-  if($deleted_seq =~ m/^([A-Z]+|\d+)$/i && $inserted_seq =~ m/^([A-Z]+)$/i && length($deleted_seq) == length($inserted_seq) && length($deleted_seq) == 1){ 
+  if($check_deleted_seq && $check_inserted_seq_letters && length($deleted_seq) == length($inserted_seq) && length($deleted_seq) == 1){ 
     $start = $position + 1; 
     $end = $start;  
 
     my $refseq_allele = get_reference_allele($slice_adaptor, $sequence_id, $start, $end); 
 
-    if($deleted_seq =~ m/^([A-Z]+)$/i){ 
+    if($check_deleted_seq_letters){ 
       $ref_allele = uc $deleted_seq; 
       throw ("Reference allele extracted from $sequence_id:$start-$end ($refseq_allele) does not match reference allele given by SPDI notation $spdi ($ref_allele)")
         unless ($ref_allele eq $refseq_allele);   
@@ -2431,11 +2435,11 @@ sub fetch_by_spdi_notation{
   }  
 
   # Variation is a deletion
-  elsif($deleted_seq =~ m/^([A-Z]+|\d+)$/i && $inserted_seq eq ''){ 
+  elsif($check_deleted_seq && $inserted_seq eq ''){ 
     $start = $position + 1; 
     $end = $start; 
 
-    if($deleted_seq =~ m/^([A-Z]+)$/i){ 
+    if($check_deleted_seq_letters){ 
       $ref_allele = uc $deleted_seq; 
       my $refseq_allele = get_reference_allele($slice_adaptor, $sequence_id, $start, $position + length($deleted_seq));
 
@@ -2450,7 +2454,7 @@ sub fetch_by_spdi_notation{
   }    
 
   # Variation is an insertion 
-  elsif($deleted_seq eq '' && $inserted_seq =~ m/^([A-Z]+)$/i){ 
+  elsif($deleted_seq eq '' && $check_inserted_seq_letters){ 
     $start = $position + 1; 
     $end = $position; 
     $ref_allele = '-';   
@@ -2458,7 +2462,7 @@ sub fetch_by_spdi_notation{
   } 
 
   # Variation is an indel  
-  elsif($deleted_seq =~ m/^([A-Z]+)$/i && $inserted_seq =~ m/^([A-Z]+)$/i){
+  elsif($check_deleted_seq_letters && $check_inserted_seq_letters){
     $start = $position + 1; 
     $end = $position + length($inserted_seq);   
 
