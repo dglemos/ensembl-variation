@@ -1987,34 +1987,28 @@ sub spdi_genomic{
   # my $ref_feature = $self;
   $ref_feature = $self->slice unless defined $ref_feature;
   my %spdi;
-  print "Self strand 1 (ref): ", ref($self), "\n";
-  print "Reference feature strand 1 (ref): ", ref($self->slice), "\n";
-  print "Self strand 1: ", $self->strand, "\n";
-  print "Reference feature strand 1: ", $ref_feature->strand, "\n";
+
   # my $ref_slice = $self->slice;
   my $ref_slice;
 
   if($ref_feature && $ref_feature->isa('Bio::EnsEMBL::Slice')){
     $ref_slice = $ref_feature;
-    print "Option 1\n";
   }
   elsif($ref_feature){
     $ref_slice = $ref_feature->feature_Slice;
-    print "Option 2\n";
   }
   else{
     $ref_slice = $self->slice;
-    print "Option 3\n";
   }
 
   my $tr_vf = $self;
   my ($vf_start, $vf_end, $ref_length) = ($tr_vf->start, $tr_vf->end, ($ref_feature->end - $ref_feature->start) + 1);
-  print "Self slice start-end: ", $vf_start, "-", $vf_end, " > Reference feature slice (input) length: ", $ref_length, "\n";
-  return {} if ($vf_start < 1 || $vf_end < 1);
+
+  return {} if ($vf_start < 1 || $vf_end < 1 ||
+      $vf_start > $ref_length || $vf_end > $ref_length);
 
   my $vf_strand = $self->strand();
-  print "Self strand 2: ", $vf_strand, "\n";
-  print "Reference feature strand 2: ", $ref_slice->strand, "\n";
+
   # set up sequence reference
   my $syn = $ref_slice->get_all_synonyms('RefSeq_genomic');
   my $reference_name = (defined $syn->[0] ? $syn->[0]->name() : $ref_feature->seq_region_name());
@@ -2023,8 +2017,7 @@ sub spdi_genomic{
   my $ref_allele = shift @all_alleles;
   my $spdi_ref_allele;
   my $spdi_alt_allele;
-  print "Self reference allele: ", $ref_allele, "\n";
-  print "Self alternate alleles: ", Dumper(@all_alleles), "\n";
+
   # Create a spdi notation for each allele
   foreach my $alt_allele (@all_alleles){
     # Expand tandems before check for non nucleotide character
