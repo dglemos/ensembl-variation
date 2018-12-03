@@ -2034,7 +2034,7 @@ sub spdi_genomic{
     ){
       $flip_allele = 1;
     }
-    print "Flip allele? (1) yes, (0) no: ", $flip_allele, "\n";
+
     my $chr_start = $tr_vf->start;
     my $chr_end   = $tr_vf->end;
 
