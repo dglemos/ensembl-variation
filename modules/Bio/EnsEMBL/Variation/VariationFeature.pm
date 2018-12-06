@@ -1970,107 +1970,112 @@ sub hgvs_genomic {
 
 =head2  spdi_genomic
 
-  Description : Returns a reference to a hash with the allele as key and a string with the genomic SPDI notation of this VariationFeature as value. By default uses the
-                slice it is placed on as reference.
-  Returntype  : Hash reference
-  Exceptions  : Throws exception if VariationFeature can not be described relative to the feature_Slice of the supplied reference feature
-  Caller      : general
-  Status      : Experimental
+Arg [1]     : int (Optional)
+              It also returns a SPDI notation for the reference allele. By default value is '0'.
+              '1' -> returns a SPDI for the reference allele;
+              '0' -> doesn't return a SPDI for the reference allele;
+Example     : my $variation = $variation_adaptor->fetch_by_name('rs145160881');
+              my $vf = $variation->get_all_VariationFeatures->[0];
+              my $spdi = $vf->spdi_genomic();
+              while (my ($allele,$spdi_str) = each(%{$spdi})) {
+               print "Allele $allele $spdi_str\n"; # For example 'Allele A NC_000016.10:68684738:G:A'
+             }
+Description : Returns a reference to a hash with the alternate and reference alleles as key and a string with the genomic SPDI notation of this VariationFeature as value.
+              By default uses the slice it is placed on as reference and only returns spdi notation for the alternate alleles.
+Returntype  : Hash reference
+Exceptions  : Throws exception if VariationFeature can not be described relative to a Slice;
+              Throws exception if input is provided and value is not 0 or 1
+Caller      : general
+Status      : Experimental
 
 =cut
 
 sub spdi_genomic{
 
-  my $self = shift;
-  my $ref_feature = shift; # slice
+  my $ref_feature = shift;
+  my $include_ref_allele = shift;
 
-  # my $ref_feature = $self;
-  $ref_feature = $self->slice unless defined $ref_feature;
   my %spdi;
+  if(!$include_ref_allele){ $include_ref_allele = 0; }
+  # If input is provided, it must have value '1' (include reference allele) or '0' (not include reference allele)
+  throw("Include reference allele must be a numeric value '1' or '0'.") unless ($include_ref_allele =~ m/^[01]$/);
 
-  # my $ref_slice = $self->slice;
-  my $ref_slice;
+  my $ref_slice = $ref_feature->slice;
+  throw("This variation feature is not placed on a slice.") unless ($ref_slice->isa('Bio::EnsEMBL::Slice'));
 
-  if($ref_feature && $ref_feature->isa('Bio::EnsEMBL::Slice')){
-    $ref_slice = $ref_feature;
-  }
-  elsif($ref_feature){
-    $ref_slice = $ref_feature->feature_Slice;
-  }
-  else{
-    $ref_slice = $self->slice;
-  }
+  my ($vf_start, $vf_end) = ($ref_feature->start, $ref_feature->end);
 
-  my $tr_vf = $self;
-  my ($vf_start, $vf_end, $ref_length) = ($tr_vf->start, $tr_vf->end, ($ref_feature->end - $ref_feature->start) + 1);
+  return {} if ($vf_start < 1 || $vf_end < 1);
 
-  return {} if ($vf_start < 1 || $vf_end < 1 ||
-      $vf_start > $ref_length || $vf_end > $ref_length);
-
-  my $vf_strand = $self->strand();
+  my $vf_strand = $ref_feature->strand();
 
   # set up sequence reference
   my $syn = $ref_slice->get_all_synonyms('RefSeq_genomic');
   my $reference_name = (defined $syn->[0] ? $syn->[0]->name() : $ref_feature->seq_region_name());
 
-  my @all_alleles = split(/\//,$tr_vf->allele_string());
+  my @all_alleles = split(/\//,$ref_feature->allele_string());
   my $ref_allele = shift @all_alleles;
+
   my $spdi_ref_allele;
   my $spdi_alt_allele;
 
   # Create a spdi notation for each allele
   foreach my $alt_allele (@all_alleles){
+
     # Expand tandems before check for non nucleotide character
     expand(\$alt_allele);
 
     # Skip if the allele contains weird characters
     next if $alt_allele =~ m/[^ACGT\-]/ig;
 
-    ##### vf strand is relative to slice - if transcript feature slice, may need complementing
+    ##### vf strand is relative to slice
     my $flip_allele = 0;
-    if(
-      $vf_strand <0 && $ref_slice->strand >0 ||
-      $vf_strand >0 && $ref_slice->strand <0
-    ){
-      $flip_allele = 1;
-    }
+    if( $vf_strand == -1 ){ $flip_allele = 1; }
 
-    my $chr_start = $tr_vf->start;
-    my $chr_end   = $tr_vf->end;
+    my $chr_start = $ref_feature->start;
+    my $chr_end   = $ref_feature->end;
 
     # If the variant is a substitution, deletion or indel
     my $spdi_position = $chr_start - 1;
 
     if($chr_start == $chr_end){
       $spdi_ref_allele = $ref_allele;
-      reverse_comp(\$spdi_ref_allele) if $flip_allele == 1;
-
-      # Variation is a deletion
+      # Variation is a deletion (1bp)
       if($alt_allele eq '-'){ $spdi_alt_allele = ""; }
-
       # Variation is a substitution
-      else{                   $spdi_alt_allele = $alt_allele;
-                              reverse_comp(\$spdi_alt_allele) if $flip_allele == 1;
-      }
-
+      else{ $spdi_alt_allele = $alt_allele; }
     }
     # Variation is an insertion
     elsif($ref_allele eq '-'){
       $spdi_position = $chr_end;
       $spdi_ref_allele = "";
       $spdi_alt_allele = $alt_allele;
-      reverse_comp(\$spdi_alt_allele) if $flip_allele == 1;
+    }
+    # Variation is a deletion (>1bp)
+    elsif($alt_allele eq '-'){
+      $spdi_ref_allele = $ref_allele;
+      my $ref_size = length($spdi_ref_allele);
+      # If reference allele (e.g. deleted sequence) size > 20bp then spdi notation for the deletion is NC_000002.12:47403326:29:
+      $spdi_ref_allele = $ref_size unless ( $ref_size <= 20 );
+      $spdi_alt_allele = "";
     }
     # Variation is an indel
     else{
       $spdi_ref_allele = $ref_allele;
       $spdi_alt_allele = $alt_allele;
-      reverse_comp(\$spdi_ref_allele) if $flip_allele == 1;
-      reverse_comp(\$spdi_alt_allele) if $flip_allele == 1;
     }
+
+    reverse_comp(\$spdi_ref_allele) if( $flip_allele == 1 && $spdi_ref_allele && $spdi_ref_allele =~ m/^[A-Z]+/i);
+    reverse_comp(\$spdi_alt_allele) if( $flip_allele == 1 && $spdi_alt_allele );
 
     my $spdi_notation = $reference_name . ":" . $spdi_position . ":" . $spdi_ref_allele . ":" . $spdi_alt_allele;
     $spdi{$alt_allele} = $spdi_notation;
+
+    # Include reference allele in the output hash
+    if($include_ref_allele == 1){
+      $spdi_notation = $reference_name . ":" . $spdi_position . ":" . $spdi_ref_allele . ":" . $spdi_ref_allele;
+      $spdi{$ref_allele} = $spdi_notation;
+    }
   }
 
   return \%spdi;
