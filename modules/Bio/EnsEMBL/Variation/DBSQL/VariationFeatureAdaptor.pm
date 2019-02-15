@@ -98,6 +98,7 @@ use Bio::EnsEMBL::Variation::Utils::Constants qw(%OVERLAP_CONSEQUENCES);
 use Bio::EnsEMBL::Variation::Utils::Sequence qw(get_hgvs_alleles trim_sequences);
 use Bio::SeqUtils;
 use Scalar::Util qw(looks_like_number);
+use Data::Dumper; 
 
 our @ISA = ('Bio::EnsEMBL::Variation::DBSQL::BaseAdaptor', 'Bio::EnsEMBL::DBSQL::BaseFeatureAdaptor');
 our $MAX_VARIATION_SET_ID = 64;
@@ -1609,7 +1610,7 @@ sub _parse_hgvs_transcript_position {
   my $transcript  = shift;
             
   my ($start,$start_offset, $end, $end_offset) = $description =~ m/^([\-\*]?\d+)((?:[\+\-]\d+)?)(?:_([\-\*]?\d+)((?:[\+\-]\d+)?))?/;
-
+  print "CDNA PARSE: $start-$end\n"; 
  my $is_exonic = 1;
  $is_exonic = 0 if ($start_offset || $end_offset || substr($start,0,1) eq '*' || (defined $end && substr($end,0,1) eq '*') || $start < 0);
 
@@ -1802,7 +1803,7 @@ sub fetch_by_hgvs_notation {
 
         $slice = $slice_adaptor->fetch_by_region($transcript->coord_system_name(),$transcript->seq_region_name());   
         ($ref_allele, $alt_allele) = get_hgvs_alleles($hgvs);
-
+        print "REF/ALT $ref_allele/$alt_allele\n"; 
         $result = $self->_hgvs_from_components(
           $hgvs, $reference, $type, $description,
           $slice, $ref_allele, $alt_allele, $start, $end, $strand, $replace_ref
@@ -1831,11 +1832,11 @@ sub fetch_by_hgvs_notation {
     $slice = $slice_adaptor->fetch_by_region('chromosome', $reference ) || $slice_adaptor->fetch_by_region(undef, $reference);    
     $strand =1; ## strand should be genome strand for HGVS genomic notation
     ($ref_allele, $alt_allele) = get_hgvs_alleles($hgvs);
-
+    print "REF/ALT: $ref_allele/$alt_allele START:END $start:$end\n"; 
     my $result = $self->_hgvs_from_components(
       $hgvs, $reference, $type, $description,
       $slice, $ref_allele, $alt_allele, $start, $end, $strand, $replace_ref
-    );
+    );  
     return $multiple_ok ? [$result] : $result;
   }
          
@@ -1872,7 +1873,7 @@ sub fetch_by_hgvs_notation {
 
       my $possible_prot;
       eval {
-        $possible_prot = _parse_hgvs_protein_position($description, $reference, $transcript);
+        $possible_prot = _parse_hgvs_protein_position_del($description, $reference, $transcript);
         throw("Could not uniquely determine nucleotide change from $hgvs") if scalar @$possible_prot > 1 && !$multiple_ok;
         $slice = $slice_adaptor->fetch_by_region($transcript->coord_system_name(), $transcript->seq_region_name());
       };
@@ -1884,7 +1885,7 @@ sub fetch_by_hgvs_notation {
       foreach my $poss(@$possible_prot) {
 
         my $result;
-
+        print "$hgvs, $reference, $type, $description ", Dumper(\@$poss), "\n"; 
         eval {
           $result = $self->_hgvs_from_components(
             $hgvs, $reference, $type, $description, $slice,
@@ -1971,7 +1972,7 @@ sub fetch_all_possible_by_hgvs_notation {
 
 sub _hgvs_from_components {
   my ($self, $hgvs, $reference, $type, $description, $slice, $ref_allele, $alt_allele, $start, $end, $strand, $replace_ref) = @_;
-
+  print "  $hgvs, $reference, $type, $description, $ref_allele, $alt_allele\n"; 
   #######################  check alleles  #######################
   
   #Get the reference allele based on the coordinates - need to supply lowest coordinate first to slice->subseq()
@@ -2141,27 +2142,34 @@ sub _pick_likely_transcript {
 sub _parse_hgvs_protein_position{
 
   my ($description, $reference, $transcript ) = @_;
-
+  print "DESCRIPTION: $description, REFERENCE: $reference, TRANSCRIPT: $transcript\n"; 
   ## only supporting the parsing of hgvs substitutions [eg. Met213Ile]
   my ($from, $pos, $to) = $description =~ /^(\w+?)(\d+)(\w+?|\*)$/; 
-
+  print "FROM: $from, POSITION: $pos, TO: $to\n";
   throw("Could not parse HGVS protein notation " . $reference . ":p.". $description ) unless $from and $pos and $to;
 
   # convert three letter AA to single
   $from = $Bio::SeqUtils::ONECODE{$from} || $from;
+  
+  if($to eq 'del'){
+     
+  }
+  else{
   $to   = $Bio::SeqUtils::ONECODE{$to} || $to;
+  } 
+  print "(AFTER) FROM: $from, POSITION: $pos, TO: $to\n"; 
 
   # get genomic position 
   my $tr_mapper = $transcript->get_TranscriptMapper(); 
 
   my @coords = $tr_mapper->pep2genomic($pos, $pos); 
-
+  print "GENOMIC POSITION: ", Dumper(\@coords), "\n"; 
   throw ("Unable to map the peptide coordinate $pos to genomic coordinates for protein $reference") if (scalar(@coords) != 1 || !$coords[0]->isa('Bio::EnsEMBL::Mapper::Coordinate')); 
 
   my $strand = $coords[0]->strand(); 
   my $start  = $strand > 0 ? $coords[0]->start() : $coords[0]->end(); 
   my $end    = $strand > 0 ? $coords[0]->start() : $coords[0]->end(); 
-
+  print "GENOMIC POSITION START-END: $start-$end\n"; 
   ## find reference sequence 
   my $slice = $transcript->slice();
 
@@ -2175,12 +2183,12 @@ sub _parse_hgvs_protein_position{
                                             -adaptor => $slice->adaptor);
 
   my $from_codon_ref = $from_slice->seq();
-
+  print "FROM CODON REF: $from_codon_ref\n"; 
   throw ("Unable to find the genomic reference sequence for protein $reference") unless defined $from_codon_ref; 
 
   ## correct for strand
   reverse_comp(\$from_codon_ref) if $strand <0;
-
+  print "FROM CODON REF (REVERSE): $from_codon_ref\n"; 
   # get correct codon table 
   my $attrib = $transcript->slice->get_all_Attributes('codon_table')->[0];
 
@@ -2189,6 +2197,7 @@ sub _parse_hgvs_protein_position{
 
   # check genomic codon is compatible with input HGVS
   my $check_prot   = $codon_table->translate($from_codon_ref);
+  print "FROM CODON REF (check_prot): $check_prot\n"; 
   my @from_codons;
   if ($check_prot eq $from){
     push @from_codons, $from_codon_ref ;
@@ -2196,10 +2205,18 @@ sub _parse_hgvs_protein_position{
   else{
     # rev-translate input ref sequence if the genome sequence does not match
     @from_codons   = $codon_table->revtranslate($from);
+    print "FROM_CODONS: ", Dumper(\@from_codons), "\n"; 
   }
 
-  # rev-translate alt sequence
-  my @to_codons   = $codon_table->revtranslate($to); 
+  # rev-translate alt sequence 
+  my @to_codons; 
+  if($to eq 'del'){
+    print "IT'S A DELETION!!\n"; 
+  } 
+  else{ 
+    @to_codons   = $codon_table->revtranslate($to); 
+    print "TO_CODONS: ", Dumper(@to_codons), "\n"; 
+  }
 
   # now iterate over all possible mutation paths 
   my %paths; 
@@ -2207,16 +2224,20 @@ sub _parse_hgvs_protein_position{
     foreach my $to_codon (@to_codons) { 
 
       my $key = $from_codon .'_'. $to_codon;
+      print "KEY: $key\n"; 
       for my $i(0..2) { 
        
         my ($a, $b) = (substr($from_codon, $i, 1), substr($to_codon, $i, 1)); 
+        print "  $a - $b\n"; 
         next if uc($a) eq uc($b); 
+        print "    ", $i.'_'.uc($a).'/'.uc($b), "\n";
         push @{$paths{$key}}, $i.'_'.uc($a).'/'.uc($b); 
       } 
 
       # non consecutive paths 
       if(scalar @{$paths{$key}} == 2 and $paths{$key}->[0] =~ /^0/ and $paths{$key}->[1] =~ /^2/) { 
          splice(@{$paths{$key}}, 1, 0, '1_'.substr($from_codon, 1, 1).'/'.substr($from_codon, 1, 1)); 
+         print "    SPLICE: ", Dumper(%paths), "\n"; 
       } 
 
       $paths{$key} = join ",", @{$paths{$key}}; 
@@ -2226,8 +2247,8 @@ sub _parse_hgvs_protein_position{
   # get shortest dist and best paths with that dist 
   my $shortest_dist = length((sort {length($a) <=> length($b)} values %paths)[0]); 
   my %best_paths = map {$_ => 1} grep {length($_) eq $shortest_dist} values %paths;
-
-  throw("Could not determine nucleotide change from peptide change $from \-\> $to") unless scalar keys %best_paths;
+  print "\nBEST_PATHS: ", Dumper(\%best_paths), "\n"; 
+  throw("Could not determine nucleotide change from peptide change $from \-\> $to") unless (scalar keys %best_paths || $to eq 'del' ); 
 
   my @results;
 
@@ -2236,7 +2257,8 @@ sub _parse_hgvs_protein_position{
     my ($ref_allele, $alt_allele) = ('', '');
     my ($this_start, $this_end) = ($start, $end);
     my @path = split(/\,/, $best_path);
-
+    print "\nBEST PATH: ", Dumper(\%paths), "\n";
+    print "BEST PATH SPLITED: ", Dumper(\@path), "\n"; 
     # coords
 	  if($strand > 0) {
   		$this_start += (split /\_/, $path[0])[0]; 
@@ -2253,8 +2275,11 @@ sub _parse_hgvs_protein_position{
 
     push @results, [$ref_allele, $alt_allele, $this_start, $this_end, $strand];
   }
-
-  return \@results;
+  if(!@results){
+    push @results, [$from_codon_ref, '-', $coords[0]->start(), $coords[0]->end(), $strand];
+  }
+  print "\nRESULTS: ", Dumper(\@results), "\n";
+  return \@results; 
   # 
   #use Data::Dumper; 
   #$Data::Dumper::Maxdepth = 3; 
@@ -2265,6 +2290,211 @@ sub _parse_hgvs_protein_position{
   #exit(0); 
 }
 
+sub _parse_hgvs_protein_position_del{
+
+  my ($description, $reference, $transcript ) = @_;
+  print "DESCRIPTION: $description, REFERENCE: $reference, TRANSCRIPT: $transcript\n"; 
+  
+  print "DESCRIPTION SPLITED: ", split('_', $description), "\n"; 
+  if($description =~ /_/){
+    my ($first,$second) = split('_', $description); 
+    print " > DESCRIPTION FIRST/SECOND: $first/$second\n"; 
+    
+    ## only supporting the parsing of hgvs substitutions [eg. Met213Ile]
+    my ($from1, $pos1) = $first =~ /^(\w+?)(\d+)$/; 
+    my ($from2, $pos2, $to2) = $second =~ /^(\w+?)(\d+)(\w+?|\*)$/;
+    
+    # convert three letter AA to single
+    $from1 = $Bio::SeqUtils::ONECODE{$from1} || $from1;
+    $from2 = $Bio::SeqUtils::ONECODE{$from2} || $from2;
+    
+    print " > FROM: $from1/$from2, POSITION: $pos1/$pos2, TO: $to2\n\n"; 
+    
+    # get genomic position 
+    my $tr_mapper_1 = $transcript->get_TranscriptMapper(); 
+
+    my @coords_1 = $tr_mapper_1->pep2genomic($pos1, $pos2); 
+    print " > GENOMIC POSITION: ", Dumper(\@coords_1), "\n"; 
+    
+    my $strand_1 = $coords_1[0]->strand(); 
+    my $start_1  = $coords_1[0]->start(); 
+    my $end_1    = $coords_1[0]->end(); 
+    print " > GENOMIC POSITION START-END: $start_1-$end_1\n"; 
+    print " > SEQ REGION LENGTH: ", ($end_1-$start_1) + 1, "\n"; 
+    
+    ## find reference sequence 
+    my $slice_1 = $transcript->slice();
+
+    ## make a small slice for sequence look-up
+    my $from_slice_1 = Bio::EnsEMBL::Slice->new(-coord_system => $slice_1->coord_system(),
+                                              -start => $start_1,
+                                              -end => $end_1,
+                                              -strand => $slice_1->strand(),
+                                              -seq_region_name => $slice_1->seq_region_name,
+                                              -seq_region_length => ($end_1-$start_1) + 1,
+                                              -adaptor => $slice_1->adaptor);
+
+    my $from_codon_ref_1 = $from_slice_1->seq();
+    print " > FROM CODON REF: $from_codon_ref_1\n"; 
+    throw ("Unable to find the genomic reference sequence for protein $reference") unless defined $from_codon_ref_1; 
+
+    ## correct for strand
+    reverse_comp(\$from_codon_ref_1) if $strand_1 <0;
+    print " > FROM CODON REF (REVERSE): $from_codon_ref_1\n"; 
+
+    my @results_1; 
+    push @results_1, [$from_codon_ref_1, '-', $start_1, $end_1, $strand_1];
+    return \@results_1;  
+
+  }
+
+  ## only supporting the parsing of hgvs substitutions [eg. Met213Ile]
+  my ($from, $pos, $to) = $description =~ /^(\w+?)(\d+)(\w+?|\*)$/; 
+  
+  print "FROM: $from, POSITION: $pos, TO: $to\n";
+  throw("Could not parse HGVS protein notation " . $reference . ":p.". $description ) unless $from and $pos and $to;
+
+  # convert three letter AA to single
+  $from = $Bio::SeqUtils::ONECODE{$from} || $from;
+  
+  if($to eq 'del'){
+     
+  }
+  else{
+  $to   = $Bio::SeqUtils::ONECODE{$to} || $to;
+  } 
+  print "(AFTER) FROM: $from, POSITION: $pos, TO: $to\n"; 
+
+  # get genomic position 
+  my $tr_mapper = $transcript->get_TranscriptMapper(); 
+
+  my @coords = $tr_mapper->pep2genomic($pos, $pos); 
+  print "GENOMIC POSITION: ", Dumper(\@coords), "\n"; 
+  throw ("Unable to map the peptide coordinate $pos to genomic coordinates for protein $reference") if (scalar(@coords) != 1 || !$coords[0]->isa('Bio::EnsEMBL::Mapper::Coordinate')); 
+
+  my $strand = $coords[0]->strand(); 
+  my $start  = $strand > 0 ? $coords[0]->start() : $coords[0]->end(); 
+  my $end    = $strand > 0 ? $coords[0]->start() : $coords[0]->end(); 
+  print "GENOMIC POSITION START-END: $start-$end\n"; 
+  ## find reference sequence 
+  my $slice = $transcript->slice();
+
+  ## make a small slice for sequence look-up
+  my $from_slice = Bio::EnsEMBL::Slice->new(-coord_system => $slice->coord_system(),
+                                            -start => $coords[0]->start(),
+                                            -end => $coords[0]->start()+2,
+                                            -strand => $slice->strand(),
+                                            -seq_region_name => $slice->seq_region_name,
+                                            -seq_region_length => 3,
+                                            -adaptor => $slice->adaptor);
+
+  my $from_codon_ref = $from_slice->seq();
+  print "FROM CODON REF: $from_codon_ref\n"; 
+  throw ("Unable to find the genomic reference sequence for protein $reference") unless defined $from_codon_ref; 
+
+  ## correct for strand
+  reverse_comp(\$from_codon_ref) if $strand <0;
+  print "FROM CODON REF (REVERSE): $from_codon_ref\n"; 
+  # get correct codon table 
+  my $attrib = $transcript->slice->get_all_Attributes('codon_table')->[0];
+
+  # default to the vertebrate codon table which is denoted as 1 
+  my $codon_table = Bio::Tools::CodonTable->new( -id => ($attrib ? $attrib->value : 1)); 
+
+  # check genomic codon is compatible with input HGVS
+  my $check_prot   = $codon_table->translate($from_codon_ref);
+  print "FROM CODON REF (check_prot): $check_prot\n"; 
+  my @from_codons;
+  if ($check_prot eq $from){
+    push @from_codons, $from_codon_ref ;
+  }
+  else{
+    # rev-translate input ref sequence if the genome sequence does not match
+    @from_codons   = $codon_table->revtranslate($from);
+    print "FROM_CODONS: ", Dumper(\@from_codons), "\n"; 
+  }
+
+  # rev-translate alt sequence 
+  my @to_codons; 
+  if($to eq 'del'){
+    print "IT'S A DELETION!!\n"; 
+  } 
+  else{ 
+    @to_codons   = $codon_table->revtranslate($to); 
+    print "TO_CODONS: ", Dumper(@to_codons), "\n"; 
+  }
+
+  # now iterate over all possible mutation paths 
+  my %paths; 
+  foreach my $from_codon (@from_codons) {
+    foreach my $to_codon (@to_codons) { 
+
+      my $key = $from_codon .'_'. $to_codon;
+      print "KEY: $key\n"; 
+      for my $i(0..2) { 
+       
+        my ($a, $b) = (substr($from_codon, $i, 1), substr($to_codon, $i, 1)); 
+        print "  $a - $b\n"; 
+        next if uc($a) eq uc($b); 
+        print "    ", $i.'_'.uc($a).'/'.uc($b), "\n";
+        push @{$paths{$key}}, $i.'_'.uc($a).'/'.uc($b); 
+      } 
+
+      # non consecutive paths 
+      if(scalar @{$paths{$key}} == 2 and $paths{$key}->[0] =~ /^0/ and $paths{$key}->[1] =~ /^2/) { 
+         splice(@{$paths{$key}}, 1, 0, '1_'.substr($from_codon, 1, 1).'/'.substr($from_codon, 1, 1)); 
+         print "    SPLICE: ", Dumper(%paths), "\n"; 
+      } 
+
+      $paths{$key} = join ",", @{$paths{$key}}; 
+    }
+  } 
+
+  # get shortest dist and best paths with that dist 
+  my $shortest_dist = length((sort {length($a) <=> length($b)} values %paths)[0]); 
+  my %best_paths = map {$_ => 1} grep {length($_) eq $shortest_dist} values %paths;
+  print "\nBEST_PATHS: ", Dumper(\%best_paths), "\n"; 
+  throw("Could not determine nucleotide change from peptide change $from \-\> $to") unless (scalar keys %best_paths || $to eq 'del' ); 
+
+  my @results;
+
+  foreach my $best_path(keys %best_paths) {
+
+    my ($ref_allele, $alt_allele) = ('', '');
+    my ($this_start, $this_end) = ($start, $end);
+    my @path = split(/\,/, $best_path);
+    print "\nBEST PATH: ", Dumper(\%paths), "\n";
+    print "BEST PATH SPLITED: ", Dumper(\@path), "\n"; 
+    # coords
+	  if($strand > 0) {
+  		$this_start += (split /\_/, $path[0])[0]; 
+  		$this_end   += (split /\_/, $path[-1])[0];
+	  }
+	  else {
+    	$this_start -= (split /\_/, $path[0])[0];
+    	$this_end   -= (split /\_/, $path[-1])[0];
+	  }
+
+    # alleles 
+    $ref_allele .= (split /\_|\//, $path[$_])[1] for 0..$#path;
+    $alt_allele .= (split /\_|\//, $path[$_])[2] for 0..$#path;  
+
+    push @results, [$ref_allele, $alt_allele, $this_start, $this_end, $strand];
+  }
+  if(!@results){
+    push @results, [$from_codon_ref, '-', $coords[0]->start(), $coords[0]->end(), $strand];
+  }
+  print "\nRESULTS: ", Dumper(\@results), "\n";
+  return \@results; 
+  # 
+  #use Data::Dumper; 
+  #$Data::Dumper::Maxdepth = 3; 
+  #warn Dumper \@from_codons; 
+  #warn Dumper \@to_codons; 
+  #warn Dumper \%paths; 
+  #warn Dumper \%best_paths; 
+  #exit(0); 
+} 
 
 =head2 fetch_by_dbID
 
