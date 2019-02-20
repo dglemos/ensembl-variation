@@ -2321,10 +2321,10 @@ sub _parse_hgvs_protein_position_del{
 
   my $from_codon_ref = $from_slice->seq();  
    throw ("Unable to find the genomic reference sequence for protein $reference") unless defined $from_codon_ref; 
-
+  print "CODON: $from_codon_ref\n"; 
   ## correct for strand
   reverse_comp(\$from_codon_ref) if $strand <0;
-
+  print "CODON REVERSE: $from_codon_ref\n"; 
   # get correct codon table 
   my $attrib = $transcript->slice->get_all_Attributes('codon_table')->[0];
 
