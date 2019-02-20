@@ -564,7 +564,7 @@ my %test_output_no_shift = (
            "",
            "insertion, coding intron downstream"
           ],
-     7 => ["NC_000019.9:g.48836478_48836480del",  ## rs149734771
+     7 => ["NC_000019.9:g.48836479_48836481del",  ## rs149734771
            "-",
            "ENST00000293261.2:c.1375_1377del",
            "-",
