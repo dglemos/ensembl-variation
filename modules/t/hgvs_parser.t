@@ -570,7 +570,7 @@ my %test_output_no_shift = (
            "-",
            "ENSP00000293261.2:p.Ser459del",
            "deletion, inframe codon loss",
-           "CCT"
+           "TCC"
           ],
     );
 
@@ -601,8 +601,8 @@ my %test_input_no_shift = (
            "ENST00000360610.2:c.2336-440_2336-439insT", 
           ],
      7 => ["NC_000019.9:g.48836479_48836481del",
-           "NC_000019.9:g.48836479_48836481delAGG",
-           "ENST00000293261.2:c.1375_1377delCCT",
+           "NC_000019.9:g.48836479_48836481delGGA",
+           "ENST00000293261.2:c.1375_1377delTCC",
            "ENSP00000293261.2:p.Ser459del",
            "ENST00000293261.2:c.1375_1377del"
           ]
