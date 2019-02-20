@@ -2276,35 +2276,36 @@ sub _parse_hgvs_protein_position_del{
 
   my ($from, $pos, $from2, $pos2, $to); 
 
-  # if the is a deletion of several amino acids, it contains the symbol '_'  
+  # if the is a deletion of several amino acids, it contains the symbol '_' eg. Lys1110_Gln1111del   
   if($description =~ /_/){
     my ($first_residue,$second_residue) = split('_', $description); 
 
-    # get the first altered amino acid and position 
+    # get the first altered amino acid and its position 
     ($from, $pos) = $first_residue =~ /^(\w+?)(\d+)$/;
-    # gets the last altered amino acid and position  
+    
+    # gets the last altered amino acid and its position  
     ($from2, $pos2, $to) = $second_residue =~ /^(\w+?)(\d+)(\w+?|\*)$/;
   }
+  
+  # only one amino acid is deleted eg. Lys1110del   
   else{
     ($from, $pos, $to) = $description =~ /^(\w+?)(\d+)(\w+?|\*)$/; 
   } 
+  
   # conver three letter AA to single for both amino acids (convert first altered amino acid)  
   $from = $Bio::SeqUtils::ONECODE{$from} || $from;
 
   # get genomic position 
   my $tr_mapper = $transcript->get_TranscriptMapper(); 
-
+  
   my @coords = defined($pos2) ? $tr_mapper->pep2genomic($pos, $pos2) : $tr_mapper->pep2genomic($pos, $pos);  
-  # print " > GENOMIC POSITION: ", Dumper(\@coords), "\n"; 
-
+  
   my $strand     = $coords[0]->strand(); 
   my $start      = $coords[0]->start(); 
   my $end        = defined($pos2) ? $coords[0]->end() : $coords[0]->start() + 2;  
   my $seq_length = ($end-$start) + 1; 
   # my $start_1  = $strand_1 > 0 ? $coords_1[0]->start() : $coords_1[0]->end(); 
   # my $end_1    = $strand_1 > 0 ? $coords_1[0]->start() : $coords_1[0]->end(); 
-  # print " > GENOMIC POSITION START-END: $start-$end\n"; 
-  # print " > SEQ REGION LENGTH: ", $seq_length, "\n"; 
 
   ## find reference sequence 
   my $slice = $transcript->slice();
@@ -2325,15 +2326,13 @@ sub _parse_hgvs_protein_position_del{
   reverse_comp(\$from_codon_ref) if $strand <0;
  
   # get correct codon table 
-  my $attrib = $transcript->slice->get_all_Attributes('codon_table')->[0];
+  # my $attrib = $transcript->slice->get_all_Attributes('codon_table')->[0];
 
   # default to the vertebrate codon table which is denoted as 1 
-  my $codon_table = Bio::Tools::CodonTable->new( -id => ($attrib ? $attrib->value : 1)); 
+  # my $codon_table = Bio::Tools::CodonTable->new( -id => ($attrib ? $attrib->value : 1)); 
 
   # check genomic codon is compatible with input HGVS
-  my $check_prot = $codon_table->translate($from_codon_ref); 
-
-  # print "CHECK PROT: $check_prot - $from$from2\n"; 
+  # my $check_prot = $codon_table->translate($from_codon_ref); 
 
   my @results; 
   push @results, [$from_codon_ref, '-', $start, $end, $strand];
