@@ -1803,7 +1803,7 @@ sub fetch_by_hgvs_notation {
 
         $slice = $slice_adaptor->fetch_by_region($transcript->coord_system_name(),$transcript->seq_region_name());   
         ($ref_allele, $alt_allele) = get_hgvs_alleles($hgvs);
-        print "REF/ALT $ref_allele/$alt_allele\n"; 
+
         $result = $self->_hgvs_from_components(
           $hgvs, $reference, $type, $description,
           $slice, $ref_allele, $alt_allele, $start, $end, $strand, $replace_ref
@@ -1832,7 +1832,7 @@ sub fetch_by_hgvs_notation {
     $slice = $slice_adaptor->fetch_by_region('chromosome', $reference ) || $slice_adaptor->fetch_by_region(undef, $reference);    
     $strand =1; ## strand should be genome strand for HGVS genomic notation
     ($ref_allele, $alt_allele) = get_hgvs_alleles($hgvs);
-    print "REF/ALT: $ref_allele/$alt_allele START:END $start:$end\n"; 
+ 
     my $result = $self->_hgvs_from_components(
       $hgvs, $reference, $type, $description,
       $slice, $ref_allele, $alt_allele, $start, $end, $strand, $replace_ref
@@ -1873,7 +1873,7 @@ sub fetch_by_hgvs_notation {
 
       my $possible_prot;
       eval {
-        if($description =~ /del/){
+        if($description =~ /del$/){
           $possible_prot = _parse_hgvs_protein_position_del($description, $reference, $transcript);
         } 
         else{
@@ -2217,9 +2217,7 @@ sub _parse_hgvs_protein_position{
       for my $i(0..2) { 
        
         my ($a, $b) = (substr($from_codon, $i, 1), substr($to_codon, $i, 1)); 
-        print "  $a - $b\n"; 
         next if uc($a) eq uc($b); 
-        print "    ", $i.'_'.uc($a).'/'.uc($b), "\n";
         push @{$paths{$key}}, $i.'_'.uc($a).'/'.uc($b); 
       } 
 
@@ -2258,13 +2256,10 @@ sub _parse_hgvs_protein_position{
     # alleles 
     $ref_allele .= (split /\_|\//, $path[$_])[1] for 0..$#path;
     $alt_allele .= (split /\_|\//, $path[$_])[2] for 0..$#path;  
-
+ 
     push @results, [$ref_allele, $alt_allele, $this_start, $this_end, $strand];
   }
-  if(!@results){
-    push @results, [$from_codon_ref, '-', $coords[0]->start(), $coords[0]->end(), $strand];
-  }
-
+  
   return \@results; 
   # 
   #use Data::Dumper; 
@@ -2301,7 +2296,7 @@ sub _parse_hgvs_protein_position_del{
   my $tr_mapper = $transcript->get_TranscriptMapper(); 
 
   my @coords = defined($pos2) ? $tr_mapper->pep2genomic($pos, $pos2) : $tr_mapper->pep2genomic($pos, $pos);  
-  print " > GENOMIC POSITION: ", Dumper(\@coords), "\n"; 
+  # print " > GENOMIC POSITION: ", Dumper(\@coords), "\n"; 
 
   my $strand     = $coords[0]->strand(); 
   my $start      = $coords[0]->start(); 
@@ -2309,8 +2304,8 @@ sub _parse_hgvs_protein_position_del{
   my $seq_length = ($end-$start) + 1; 
   # my $start_1  = $strand_1 > 0 ? $coords_1[0]->start() : $coords_1[0]->end(); 
   # my $end_1    = $strand_1 > 0 ? $coords_1[0]->start() : $coords_1[0]->end(); 
-  print " > GENOMIC POSITION START-END: $start-$end\n"; 
-  print " > SEQ REGION LENGTH: ", $seq_length, "\n"; 
+  # print " > GENOMIC POSITION START-END: $start-$end\n"; 
+  # print " > SEQ REGION LENGTH: ", $seq_length, "\n"; 
 
   ## find reference sequence 
   my $slice = $transcript->slice();
@@ -2329,6 +2324,17 @@ sub _parse_hgvs_protein_position_del{
 
   ## correct for strand
   reverse_comp(\$from_codon_ref) if $strand <0;
+
+  # get correct codon table 
+  my $attrib = $transcript->slice->get_all_Attributes('codon_table')->[0];
+
+  # default to the vertebrate codon table which is denoted as 1 
+  my $codon_table = Bio::Tools::CodonTable->new( -id => ($attrib ? $attrib->value : 1)); 
+
+  # check genomic codon is compatible with input HGVS
+  my $check_prot = $codon_table->translate($from_codon_ref); 
+
+  # print "CHECK PROT: $check_prot - $from$from2\n"; 
 
   my @results; 
   push @results, [$from_codon_ref, '-', $start, $end, $strand];
