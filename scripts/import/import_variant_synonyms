@@ -631,7 +631,9 @@ sub get_all_sources {
     my $source_name = $result_from_source->[1]; 
     my $source = $source_adaptor->fetch_by_name($source_name);
 
-    if(!defined($source)) { 
+    # In the production db there's source 'dbSNP151' without any variant synonyms linked to it
+    # This source can't be added to the db when importing synonyms
+    if(!defined($source) && $source_name !~ /dbSNP/) {
       # get info for source  
       $source = Bio::EnsEMBL::Variation::Source->new
          (-name        => $source_name, 
