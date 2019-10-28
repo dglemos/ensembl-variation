@@ -2034,6 +2034,10 @@ sub _hgvs_from_components {
     ($ref_allele, $alt_allele,  $start, $end) = @{trim_sequences($ref_allele, $alt_allele,  $start, $end, 1)};
   }
   elsif ($description =~ m/ins/i && $description !~ m/del/i) {
+     if($description =~ m/ins[0-9]+/i){
+       throw ("Unsupported HGVS insertion");
+     }
+
      # insertion: the start & end positions are inverted by convention
       if($end > $start){ ($start, $end  ) = ( $end , $start); }   
   }
