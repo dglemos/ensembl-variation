@@ -31,7 +31,9 @@ use strict;
 use Bio::EnsEMBL::Registry;
 use Bio::EnsEMBL::Utils::Exception qw(verbose throw warning);
 use Bio::EnsEMBL::Utils::Argument qw( rearrange );
+use Bio::EnsEMBL::Variation::Utils::SpecialChar qw(replace_char);
 use Data::Dumper;
+
 use FindBin qw( $Bin );
 use Getopt::Long;
 use ImportUtils qw(dumpSQL debug create_and_load load);
@@ -203,15 +205,20 @@ foreach my $in_file (@files) {
   }
   
   # Variation set
-  if ($species eq 'human' && $fname =~ /pilot(\d)/) { 
+  if ($species =~ /homo|human/i && $fname =~ /pilot(\d)/) { 
     $var_set_id = $var_set{"pilot$1"};
   }
-  elsif ($species eq 'human' && $fname =~ /estd199/) {
+  elsif ($species =~ /homo|human/i && $fname =~ /estd199/) { # outdated
     $var_set_id = '1kg';
+  }
+  elsif ($species =~ /homo|human/i && $fname =~ /nstd166/) {
+    $var_set_id = 'gnomAD';
   }
   else {
     $var_set_id = undef;
   }
+
+  print "VARIATION SET: $var_set_id\n";
 
   %num_mapped = ();
   %num_not_mapped = ();
@@ -233,7 +240,7 @@ foreach my $in_file (@files) {
   structural_variation_feature();
   structural_variation_association();
   somatic_study_processing() if ($somatic_study == 1);
-  structural_variation_set() if ($var_set_id);
+  structural_variation_set() if ($var_set_id); # not used anymore (phase 3 used now)
   structural_variation_sample();
   phenotype_feature();
   drop_tmp_table() if (!defined($debug));
@@ -327,7 +334,7 @@ sub source {
 
 sub study_table{
   my $data = shift;
-  
+
   debug(localtime()." Inserting into $study_table table");
   
   $data->{desc} = $data->{s_desc} if ($data->{s_desc} and !$data->{desc});
@@ -354,8 +361,9 @@ sub study_table{
         
   my $author_desc;
   $author_desc = "$first_author $year_desc " if ($first_author and defined($year_desc));
-  $author = (split('_',$author))[0] if ($author !~ /.+_et_al_.+/);
-  
+  # Don't think this is needed
+  # $author = (split('_',$author))[0] if ($author !~ /.+_et_al_.+/);
+
   #  PubMed ID
   my $pmid_desc = '';
   my $pubmed    = 'NULL';
@@ -380,13 +388,17 @@ sub study_table{
   # URL
   $study =~ /(\w+\d+)\.?\d*/;
   my $study_ftp = $1;
-  $study_ftp = "ftp://ftp.ebi.ac.uk/pub/databases/dgva/$study_ftp\_$author";
-  
-  
+  if ($source_name eq 'DGVa'){
+    $study_ftp = "ftp://ftp.ebi.ac.uk/pub/databases/dgva/$study_ftp\_$author";
+  }
+  else {
+    $study_ftp = "https://www.ncbi.nlm.nih.gov/dbvar/studies/$study_ftp";
+  }
+
   my $assembly_desc = " [remapped from build $assembly]" if ($mapping and $assembly ne $target_assembly);
   
   $stmt = qq{ SELECT st.study_id, st.description, st.external_reference FROM study st, source s 
-              WHERE s.source_id=st.source_id AND s.name='DGVa' and st.name='$study'};
+              WHERE s.source_id=st.source_id AND s.name='$source_name' and st.name='$study'};
   my $rows = $dbVar->selectall_arrayref($stmt);    
   
   my $assembly_desc;
@@ -423,12 +435,12 @@ sub study_table{
     
     my $external_link_sql;
     if ($external_link eq 'NULL') {
-      if ($study_xref && $study_xref !~ /NULL/i && $study_xref ne '') {
+      # if ($study_xref && $study_xref !~ /NULL/i && $study_xref ne '') {
         $external_link_sql = '';
-      }
-      else {
-        $external_link_sql = "external_reference='$external_link',";
-      }
+      # }
+      # else {
+      #   $external_link_sql = "external_reference='$external_link',";
+      # }
     }
     else {
       $external_link_sql = "external_reference='$external_link',";
@@ -441,6 +453,7 @@ sub study_table{
                   url="$study_ftp"
                 WHERE study_id=$study_id
               };
+    # print "UPDATE: $stmt\n";
     $dbVar->do($stmt);
   }
   # INSERT
@@ -471,6 +484,7 @@ sub study_table{
         '$study_type'
       )
     };
+    print "INSERT: $stmt\n";
     $dbVar->do($stmt);
     $study_id = $dbVar->{'mysql_insertid'};
   }
@@ -484,7 +498,7 @@ sub study_table{
 sub structural_variation {
   
   debug(localtime()." Inserting into $sv_table table");
-  
+ 
   my $stmt = qq{
     INSERT IGNORE INTO
     $sv_table (
@@ -728,6 +742,7 @@ sub structural_variation_set {
         t.population is not null AND
         vs.name=CONCAT('1000 Genomes - ',t.population)
     };
+    print "VARIATION SET 1: $stmt\n";
     $dbVar->do($stmt);
     
     # Variation set "All"
@@ -751,6 +766,7 @@ sub structural_variation_set {
         t.population is not null AND
         vs.name='1000 Genomes - All'
     };
+    print "VARIATION SET 2: $stmt\n";
     $dbVar->do($stmt);
     
     # Variation set "High quality"
@@ -774,6 +790,7 @@ sub structural_variation_set {
         t.status = 'High quality' AND
         vs.name='1000 Genomes - High quality'
     };
+    print "VARIATION SET 3: $stmt\n";
     $dbVar->do($stmt);
     
     
@@ -805,6 +822,7 @@ sub structural_variation_set {
         t.is_ssv=0 AND
         t.id=sv.variation_name
     };
+    print "VARIATION SET: $stmt\n";
     $dbVar->do($stmt);
     
     push(@var_set_list,$var_set_id);
@@ -812,17 +830,18 @@ sub structural_variation_set {
   
   my $set_id_list = join(',',@var_set_list);
   
+  print "-> ", Dumper($set_id_list), "\n";
+  
   # Populate the meta table
   my $sets = $dbVar->selectall_arrayref(qq{SELECT vs.name,a.value FROM variation_set vs, attrib a 
-                                          WHERE vs.variation_set_id IN ($set_id_list) 
-                                          AND a.attrib_id=vs.short_name_attrib_id;}
-                                       );
+                                          WHERE vs.variation_set_id IN ('$set_id_list') 
+                                          AND a.attrib_id=vs.short_name_attrib_id});
   foreach my $set (@$sets) {                
     my $meta_value = "sv_set#".$set->[0]."#".$set->[1]; 
     # Check if the meta entry already exists, else it create the entry
     if (!$dbVar->selectrow_arrayref(qq{SELECT meta_id FROM meta WHERE meta_key='web_config' 
-                                       AND meta_value='$meta_value';})) {
-      $dbVar->do(qq{INSERT INTO meta (meta_key,meta_value) VALUES ('web_config','$meta_value');});
+                                       AND meta_value='$meta_value'})) {
+      $dbVar->do(qq{INSERT INTO meta (meta_key,meta_value) VALUES ('web_config','$meta_value')});
     }
   }
 }
@@ -1053,6 +1072,8 @@ sub parse_gvf {
     chomp ($current_line);
     my $line_info = parse_line($current_line);
     
+    # print "LINE INFO: ", Dumper($line_info), "\n";
+    
     my $infos = check_breakpoint_coordinates($line_info);
     
     my $is_failed = 0;
@@ -1164,6 +1185,7 @@ sub parse_gvf {
       if ($info->{phenotype}) {
         my @phenotypes = map { decode_text($_) } keys(%{$info->{phenotype}});
         foreach my $phenotype (@phenotypes) {
+          # print "INSIDE PHENOTYPE MAP: ", Dumper($phenotype), "\n"; 
           my $phen_data = generate_phenotype_data_row($info,$phenotype);
           print OUT2 (join "\t", @{$phen_data})."\n";
         }
@@ -1189,12 +1211,23 @@ sub get_header_info {
   my ($label, $info);
   if ($line =~ /^##/) {
     ($label, $info) = split(' ', $line);
-  } else {
+  } 
+  elsif ($line =~ /\:/) {
     $line =~ /^(.+)\:\s+(.+)$/;
     $label = $1;
     $info  = $2;
   }
-  
+  # dbVar files contain header lines without ':', example: # assembly-name GRCh38  (hg38)
+  else {
+    $line =~ s/^#\s//;
+    $line =~ /^(.+?)\s+(.+)$/;
+    $label = $1;
+    $info  = $2;
+    if ($label =~ /assembly.+name/i) {
+      $info =~ s/\s+.+//;
+    }
+  }
+
   $label =~ s/#//g;
   $label =~ s/^\s//;
   $info  =~ s/^\s+//;
@@ -1218,7 +1251,7 @@ sub get_header_info {
     }
   }
   
-  # Study information
+  # Study information for DGVa files
   elsif ($label eq 'Study') {
     foreach my $st (split(';',$info)) {
       my ($s_label,$s_info) = split('=',$st);
@@ -1230,7 +1263,12 @@ sub get_header_info {
       $somatic_study = 1 if ($s_label =~ /Contains/i && $s_info =~ /somatic/i);
     }
   }
-  
+
+  # dbVar files study description
+  elsif ($label eq 'Study_description') {
+    $h->{s_desc} = $info;
+  }
+
   # Sample information
   elsif ($label eq 'sample') {
     my ($sample,$subject,$tissue, $pop);
@@ -1408,6 +1446,7 @@ sub parse_9th_col {
 
   foreach my $inf (@$last_col) {
     my ($key,$value) = split('=',$inf);
+
     $info->{$key} = $value if ($key ne 'phenotype'); # Default
     
     $info->{ID} = $value if ($key eq 'Name');
@@ -1487,12 +1526,40 @@ sub parse_9th_col {
     if ($key eq 'phenotype') {
       $value =~ s/, /__/g;
       foreach my $phe (split(',', $value)) {
+
+        print "THIS IS PHENOTYPE: $phe\n";
+
+         if($phe =~ /\+\¦/ || $phe =~ /\÷/ || $phe =~ /\+\¿/ || $phe =~ /\+\¬/){
+           print "- PHENOTYPE BEFORE: $phe\n";
+           $phe =~ s/\+\¦/o/;
+           $phe =~ s/\÷/o/;
+           $phe =~ s/\+\¿/e/;
+           $phe =~ s/\+\¬/e/;
+           print "- PHENOTYPE AFTER: $phe\n";
+         }
+
+        # $phe = replace_char($phe);
+
         $phe =~ s/__/, /g;
         $info->{phenotype}{$phe} = 1;
       }
     }
     $info->{phenotype}{$value} = 1 if ($key eq 'phenotype_description');
     $info->{phenotype_link} = $value if ($key eq 'phenotype_link' || $key eq 'phenotype_id');
+    
+    # Allele count and frequency
+    if ($key eq 'allele_count') {
+      $info->{allele_count} = $value;
+    }
+    
+    if ($key eq 'allele_frequency') {
+      $info->{allele_frequency} = $value;
+    }
+    
+    if ($key eq 'allele_number') {
+      $info->{allele_number} = $value;
+    }
+
   }
   
   
@@ -1503,6 +1570,14 @@ sub parse_9th_col {
     my @phenotype_links = split(',',$info->{phenotype_link});
 
     foreach my $p_link (@phenotype_links) {
+
+      if($p_link =~ /\+\¦/ || $p_link =~ /\÷/){
+        print "PHENOTYPE BEFORE: $p_link\n";
+        $p_link =~ s/\+\¦/o/;
+        $p_link =~ s/\÷/o/;
+        print "PHENOTYPE AFTER: $p_link\n";
+      }
+
       # Look at the MedGen data
       if ($medgen_file && $p_link =~ /^MedGen:\w+$/i) {
         $p_link =~ /^MedGen:(\w+)$/i;
@@ -1754,6 +1829,15 @@ sub post_processing_clinical_significance {
   };
   $dbVar->do($stmt);
 
+  my $get_clin_sig = $dbVar->selectall_arrayref(qq{
+    SELECT t.clin_sign FROM $sv_table sv, $temp_clin_table t WHERE sv.structural_variation_id=t.sv_id
+  });
+
+  # $stmst_get_clin_sig->execute();
+
+#   my $clin_sig_x = $stmst_get_clin_sig->fetchrow_array;
+  # print "CLINICAL SIGNIFICANCE: ", Dumper($get_clin_sig), "\n";
+
   my $stmt2 = qq{
     UPDATE $sv_table sv, $temp_clin_table t SET sv.clinical_significance=t.clin_sign WHERE sv.structural_variation_id=t.sv_id;
   };
@@ -1847,7 +1931,7 @@ sub cleanup {
   }
   
   # Column "tmp_clinic_name" in structural_variation
-  my $sth2 = $dbVar->prepare(qq{ SELECT count(*) FROM $sv_table WHERE clinical_significance is NULL AND $tmp_sv_clin_col is not NULL});
+  my $sth2 = $dbVar->prepare(qq{ SELECT count(*) FROM $sv_table WHERE (clinical_significance is NULL or clinical_significance = '') AND $tmp_sv_clin_col is not NULL});
   $sth2->execute();
   my $sv_clin_count = ($sth2->fetchrow_array)[0];
   $sth2->finish;
@@ -1912,8 +1996,12 @@ sub generate_data_row {
     }
   }
   $info->{phenotype} = decode_text($info->{phenotype}); 
+
+  # print "PHENOTYPE AFTER DECODE: ", Dumper($info->{phenotype}), "\n"; 
  
   my @row = map { $info->{$_} } @attribs;
+
+  # print "PHENOTYPE AFTER DECODE ROW: ", Dumper(\@row), "\n";
 
   return \@row;
 }
@@ -1974,6 +2062,9 @@ sub get_medgen_phenotype {
       $phen_desc = (split(',',$res))[1];
       $phen_desc =~ s/"//g;
     }
+
+    $phen_desc = replace_char($phen_desc);
+
     return $phen_desc;
   }
 
