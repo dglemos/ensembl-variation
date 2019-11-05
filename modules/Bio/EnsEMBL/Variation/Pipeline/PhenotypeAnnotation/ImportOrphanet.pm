@@ -96,7 +96,7 @@ sub run {
   my $file_orphanet = $self->required_param('orphanet_file');
 
   # get phenotype data + save it (all in one method)
-  my ($results,$source_date) = $self->parse_input_file($self->workdir."/".$file_orphanet);
+  my ($results,$source_date) = $self->parse_input_file($file_orphanet);
   $self->print_logFH("Got ".(scalar @{$results->{'phenotypes'}})." phenotypes \n") if ($self->debug);
 
   #save source_date
@@ -147,15 +147,12 @@ sub parse_input_file {
   my @phenotypes;
 
   my $xml_parser   = XML::LibXML->new();
-  my $orphanet_doc = $xml_parser->parse_file($infile);
+  my $orphanet_doc = $xml_parser->parse_file($self->workdir."/".$infile);
 
   #get date:
   my $first_node = $orphanet_doc->findnodes('JDBOR')->get_node(1);
   $first_node->getAttribute('date') =~ /(\d+)-(\d{2})-(\d{2})/;
   my $date = $1.$2.$3;
-
-  my %special_characters = %{$self->get_special_characters};
-  my $special_chars = join('',keys(%special_characters));
 
   foreach my $disorder ($orphanet_doc->findnodes('JDBOR/DisorderList/Disorder')) {
     my ($orpha_number_node) = $disorder->findnodes('./OrphaNumber');
@@ -163,14 +160,8 @@ sub parse_input_file {
     my ($name_node) = $disorder->findnodes('./Name');
     my $name = $name_node->to_literal;
 
-    # Replace special characters TODO: do this char replacement in BasePhenotypeAnnotation
+    # Special encoding conversion
     utf8::encode($name);
-    if ($name =~ /[$special_chars]/) {
-      foreach my $char (keys(%special_characters)) {
-        my $new_char = $special_characters{$char};
-        $name =~ s/$char/$new_char/g if ($name =~ /$char/);
-      }
-    }
 
     my @gene_nodes = $disorder->findnodes('./DisorderGeneAssociationList/DisorderGeneAssociation/Gene');
 
