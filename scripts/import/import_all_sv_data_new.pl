@@ -611,8 +611,8 @@ sub structural_variation_feature {
       somatic,
       breakpoint_order,
       length,
-      minor_allele_freq,
-      minor_allele_count
+      allele_freq,
+      allele_count
     )
     SELECT
       DISTINCT
