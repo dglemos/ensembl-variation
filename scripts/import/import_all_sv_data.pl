@@ -94,7 +94,8 @@ my %study_to_skip =  ( 'nstd8'  => 1, # Human & chimp
 
 my @attribs = ('ID','SO_term','chr','outer_start','start','inner_start','inner_end','end',
                'outer_end','strand','parent','clinical','subject','sample','gender','is_ssv',
-               'is_failed','population','bp_order','is_somatic','status','alias','length','copy_number','zygosity');
+               'is_failed','population','bp_order','is_somatic','status','alias','length','copy_number','zygosity',
+               'allele_count', 'allele_frequency');
 
 my %attribs_col = ('ID'          => 'id *',
                    'SO_term'     => 'type',
@@ -120,7 +121,9 @@ my %attribs_col = ('ID'          => 'id *',
                    'alias'       => 'alias',
                    'length'      => 'length i',
                    'copy_number' => 'copy_number', # Not 'i' because we need to differenciate between "0 copy" and the "default value (0)"
-                   'zygosity'    => 'zygosity i'
+                   'zygosity'    => 'zygosity i',
+                   'allele_count'     => 'allele_count', # Not 'i' because we need to differenciate between empty value and frequency zero
+                   'allele_frequency' => 'allele_frequency' # Not 'i' because we need to differenciate between empty value and frequency zero
                   );
 
 
@@ -161,7 +164,7 @@ $cs_version_number = $target_assembly;
 $cs_version_number =~ s/\D//g;
 
 # variation set
-my %var_set = ('pilot1' => 31, 'pilot2' => 32);
+# my %var_set = ('pilot1' => 31, 'pilot2' => 32);
 
 
 # run the mapping sub-routine if the data needs mapping
@@ -203,13 +206,10 @@ foreach my $in_file (@files) {
   else {
     $fname = $in_file;
   }
-  
-  # Variation set
-  if ($species =~ /homo|human/i && $fname =~ /pilot(\d)/) { 
-    $var_set_id = $var_set{"pilot$1"};
-  }
-  elsif ($species =~ /homo|human/i && $fname =~ /estd199/) { # outdated
-    $var_set_id = '1kg';
+
+  # Variation set - 1000 Genomes phase 3 and gnomAD
+  if ($species =~ /homo|human/i && $fname =~ /estd214/) { 
+    $var_set_id = '1kg_3';
   }
   elsif ($species =~ /homo|human/i && $fname =~ /nstd166/) {
     $var_set_id = 'gnomAD';
@@ -233,18 +233,18 @@ foreach my $in_file (@files) {
   # Parsing
   parse_gvf($fname);
   load_file_data();
-  
+
   # Insertion
   structural_variation();
   failed_structural_variation();
   structural_variation_feature();
   structural_variation_association();
-  somatic_study_processing() if ($somatic_study == 1);
-  structural_variation_set() if ($var_set_id); # not used anymore (phase 3 used now)
+  somatic_study_processing() if ($somatic_study == 1); # 57 - check it it's ever used 
+  structural_variation_set() if ($var_set_id);
   structural_variation_sample();
   phenotype_feature();
   drop_tmp_table() if (!defined($debug));
-  debug(localtime()." Done!\n");
+
   $f_count ++;
 }
 
@@ -271,6 +271,7 @@ debug(localtime()." All done!");
 #  Methods  #
 #############
 
+# Load data into temp tables - temp_sv, temp_sv_phenotype
 sub load_file_data{
   debug(localtime()." Loading file into temporary table");
   
@@ -285,7 +286,7 @@ sub load_file_data{
   `mv $TMP_DIR/$TMP_FILE\2 $TMP_DIR/$TMP_FILE`;
   create_and_load( $dbVar, "$temp_phen_table", "id *", "phenotype *");
   
-  # fix nulls
+  # Fix nulls - after inserting in the temp tables some values need to be fixed
   if (($dbVar->selectrow_arrayref(qq{SELECT count(*) FROM $temp_table WHERE (outer_start=0 AND start=0 AND inner_start=0) OR (inner_end=0 AND end=0 AND outer_end=0);}))->[0] != 0) {
     warn "Structural variants with start and/or end coordinates equal to 0 found in the file!";
     $dbVar->do(qq{UPDATE $temp_table SET outer_start=outer_end, start=end, inner_start=inner_end WHERE outer_start=0 AND start=0 AND inner_start=0});
@@ -297,15 +298,19 @@ sub load_file_data{
   }
   
   
-  foreach my $col('clinic', 'sample', 'subject', 'status', 'alias', 'length', 'copy_number', 'zygosity') {
+  foreach my $col('clinic', 'sample', 'subject', 'status', 'alias', 'length', 'copy_number', 'zygosity', 'allele_frequency', 'allele_count') {
     $dbVar->do(qq{UPDATE $temp_table SET $col = NULL WHERE $col = '';});
   }
   
-  # Case with insertions            
+  # foreach my $a_col('allele_freq', 'allele_count') {
+  #   $dbVar->do(qq{UPDATE $temp_table set $a_col = NULL WHERE $a_col = 0 AND })
+  # }
+  
+  # Case with insertions
   $dbVar->do(qq{UPDATE $temp_table SET start=outer_start, end=inner_start, 
                 outer_end=inner_start, inner_start=NULL, inner_end=NULL
                 WHERE outer_start=outer_end AND inner_start=inner_end;});
-}                
+}
 
 sub source {
   debug(localtime()." Inserting into source table");
@@ -332,6 +337,7 @@ sub source {
   return $source_id[0];
 }
 
+# This method removes data from db if -replace 
 sub study_table{
   my $data = shift;
 
@@ -453,7 +459,7 @@ sub study_table{
                   url="$study_ftp"
                 WHERE study_id=$study_id
               };
-    # print "UPDATE: $stmt\n";
+    print "UPDATE: $stmt\n";
     $dbVar->do($stmt);
   }
   # INSERT
@@ -492,7 +498,6 @@ sub study_table{
   # Avoid to replace a study twice, when a second file with the patched assembly is also imported.
   $study_done{$study} = 1;
 }
-
 
 # Structural variations & supporting structural variations
 sub structural_variation {
@@ -536,7 +541,6 @@ sub structural_variation {
   $dbVar->do($stmt);
 }
 
-  
 # Failed structural variations
 sub failed_structural_variation   {  
   debug(localtime()." Inserting into $sv_failed table for SVs");
@@ -583,8 +587,7 @@ sub failed_structural_variation   {
   };
   $dbVar->do($stmt);
 }
-  
-  
+
 # Structural variation features & supporting structural variation features
 sub structural_variation_feature {
   debug(localtime()." Inserting into $svf_table table");
@@ -607,7 +610,9 @@ sub structural_variation_feature {
       is_evidence,
       somatic,
       breakpoint_order,
-      length
+      length,
+      allele_freq,
+      allele_count
     )
     SELECT
       DISTINCT
@@ -627,7 +632,9 @@ sub structural_variation_feature {
       t.is_ssv,
       t.is_somatic,
       t.bp_order,
-      t.length
+      t.length,
+      t.allele_frequency,
+      t.allele_count
     FROM
       seq_region q,
       $temp_table t,
@@ -641,7 +648,6 @@ sub structural_variation_feature {
   $dbVar->do($stmt);
 }
 
-  
 # Structural variation association
 sub structural_variation_association {
   debug(localtime()." Inserting into $sva_table table");
@@ -666,7 +672,6 @@ sub structural_variation_association {
   };
   $dbVar->do($stmt);
 }
-
 
 # Somatic study processing  
 sub somatic_study_processing {  
@@ -702,14 +707,13 @@ sub somatic_study_processing {
   $dbVar->do($stmt);
 }
 
-
 sub structural_variation_set {
   debug(localtime()." Inserting into $set_table table");
   
   my $stmt;
   my @var_set_list;
   
-  if ($var_set_id eq '1kg') {
+  if ($var_set_id eq '1kg_3') {
   
     my %pop_1kg_p1 = (
       'ASW' => 'AFR', 'LWK' => 'AFR', 'YRI' => 'AFR',                                      # AFR
@@ -721,7 +725,9 @@ sub structural_variation_set {
     while (my($sub_pop, $sup_pop) = each (%pop_1kg_p1)) {
       $dbVar->do(qq{UPDATE $temp_table SET population='$sup_pop' WHERE population='$sub_pop'});
     }
-    
+
+    # set_table = variation_set_structural_variation 
+
     $stmt = qq{
        INSERT IGNORE INTO
        $set_table (
@@ -740,9 +746,8 @@ sub structural_variation_set {
         t.id=sv.variation_name AND
         sva.supporting_structural_variation_id=sv.structural_variation_id AND
         t.population is not null AND
-        vs.name=CONCAT('1000 Genomes - ',t.population)
+        vs.name=CONCAT('1000 Genomes 3 - ',t.population)
     };
-    print "VARIATION SET 1: $stmt\n";
     $dbVar->do($stmt);
     
     # Variation set "All"
@@ -764,35 +769,9 @@ sub structural_variation_set {
         t.id=sv.variation_name AND
         sva.supporting_structural_variation_id=sv.structural_variation_id AND
         t.population is not null AND
-        vs.name='1000 Genomes - All'
+        vs.name='1000 Genomes 3 - All'
     };
-    print "VARIATION SET 2: $stmt\n";
     $dbVar->do($stmt);
-    
-    # Variation set "High quality"
-    $stmt = qq{
-       INSERT IGNORE INTO
-       $set_table (
-        structural_variation_id,
-        variation_set_id
-      )
-      SELECT DISTINCT
-         sv.structural_variation_id,
-         vs.variation_set_id
-      FROM
-         $temp_table t,
-        $sv_table sv,
-        variation_set vs
-      WHERE
-        t.id=sv.variation_name AND
-        sv.is_evidence=0 AND
-        t.population is not null AND
-        t.status = 'High quality' AND
-        vs.name='1000 Genomes - High quality'
-    };
-    print "VARIATION SET 3: $stmt\n";
-    $dbVar->do($stmt);
-    
     
     my $sets_1kg = $dbVar->selectrow_arrayref(qq{
          SELECT DISTINCT vssv.variation_set_id 
@@ -803,6 +782,35 @@ sub structural_variation_set {
       push (@var_set_list,$s_id);
     }   
     
+  }
+  elsif($var_set_id eq 'gnomAD'){
+    
+    # $set_table = variation_set_structural_variation
+    # $temp_table = temp_sv
+    # $sv_table = structural_variation
+    # $sva_table = structural_variation_association
+    
+    $stmt = qq{
+       INSERT IGNORE INTO
+       $set_table (
+        structural_variation_id,
+        variation_set_id
+      )
+      SELECT DISTINCT
+         sva.structural_variation_id,
+         vs.variation_set_id
+      FROM
+         $temp_table t,
+        $sv_table sv,
+        $sva_table sva,
+        variation_set vs
+      WHERE
+        t.id=sv.variation_name AND
+        sva.supporting_structural_variation_id=sv.structural_variation_id AND
+        t.population is not null AND
+        vs.name='gnomAD'
+    };
+    $dbVar->do($stmt);
   }
   else {
   
@@ -822,7 +830,6 @@ sub structural_variation_set {
         t.is_ssv=0 AND
         t.id=sv.variation_name
     };
-    print "VARIATION SET: $stmt\n";
     $dbVar->do($stmt);
     
     push(@var_set_list,$var_set_id);
@@ -830,8 +837,8 @@ sub structural_variation_set {
   
   my $set_id_list = join(',',@var_set_list);
   
-  print "-> ", Dumper($set_id_list), "\n";
-  
+  print "SET ID LIST: ", Dumper($set_id_list), "\n";
+
   # Populate the meta table
   my $sets = $dbVar->selectall_arrayref(qq{SELECT vs.name,a.value FROM variation_set vs, attrib a 
                                           WHERE vs.variation_set_id IN ('$set_id_list') 
@@ -845,123 +852,6 @@ sub structural_variation_set {
     }
   }
 }
-
-
-sub structural_variation_sample {
-  my $stmt;
-  
-  debug(localtime()." Inserting into $svs_table table");
-
-  my $study_name = ($dbVar->selectrow_arrayref(qq{SELECT name FROM study WHERE study_id=$study_id;}))->[0];
-
-  # Create strain entries
-  if ($species =~ /mouse|mus/i) {
-    $stmt = qq{ SELECT DISTINCT subject FROM $temp_table 
-                WHERE subject NOT IN (SELECT DISTINCT name from individual WHERE individual_type_id=1)
-              };
-    my $rows_strains = $dbVar->selectall_arrayref($stmt);
-    foreach my $row (@$rows_strains) {
-      my $strain = $row->[0];
-      next if ($strain eq  '');
-    
-      if (!$dbVar->selectrow_arrayref(qq{SELECT individual_id FROM individual WHERE name='$strain' LIMIT 1})) {
-        $dbVar->do(qq{ INSERT IGNORE INTO individual (name,description,gender,individual_type_id) VALUES ('$strain','Strain from the DGVa study $study_name','Unknown',1)});
-      }
-      else{
-        if ($dbVar->selectrow_arrayref(qq{SELECT individual_id FROM individual WHERE name='$strain' AND individual_type_id!=1})) {
-          $dbVar->do(qq{UPDATE individual SET individual_type_id=1 WHERE name='$strain' AND individual_type_id!=1});
-        }
-      }
-    }
-    
-    # Create sample entries
-    $stmt = qq{ SELECT DISTINCT sample, subject FROM $temp_table WHERE is_ssv=1 AND sample NOT IN (SELECT DISTINCT name from sample WHERE study_id=$study_id AND display!="UNDISPLAYABLE")};
-    my $rows_samples = $dbVar->selectall_arrayref($stmt);
-    foreach my $row (@$rows_samples) {
-      my $sample  = $row->[0];
-      my $subject = $row->[1];
-      next if ($sample eq  '' || $subject eq '');
-
-      $dbVar->do(qq{ INSERT IGNORE INTO sample (name,description,study_id,display,individual_id) SELECT '$sample','Sample from the DGVa study $study_name', $study_id,"MARTDISPLAYBLE",min(individual_id) FROM individual WHERE name='$subject' LIMIT 1});
-    }
-  }
-  # Create individual entries (not for mouse)
-  else { 
-    $stmt = qq{ SELECT DISTINCT subject, gender FROM $temp_table WHERE is_ssv=1 AND subject NOT IN (SELECT DISTINCT name from individual)};
-    my $rows_subjects = $dbVar->selectall_arrayref($stmt);
-    foreach my $row (@$rows_subjects) {
-      my $subject = $row->[0];
-      my $gender = ($row->[1] =~ /\w+/) ? $row->[1] : 'Unknown';
-      next if ($subject eq  '');
-
-      my $itype_val = ($species =~ /human|homo/i) ? 3 : 2;
-    
-      $dbVar->do(qq{ INSERT IGNORE INTO individual (name,description,gender,individual_type_id) VALUES ('$subject','Subject from the DGVa study $study_name','$gender',$itype_val)});
-    }
-  
-    # Create sample entries
-    $stmt = qq{ SELECT DISTINCT sample, subject FROM $temp_table WHERE is_ssv=1 AND sample NOT IN (SELECT DISTINCT name from sample)};
-    my $rows_samples = $dbVar->selectall_arrayref($stmt);
-    foreach my $row (@$rows_samples) {
-      my $sample  = $row->[0];
-      my $subject = $row->[1];
-      next if ($sample eq  '' || $subject eq '');
-
-      #$dbVar->do(qq{ INSERT IGNORE INTO sample (name,description,study_id,individual_id) SELECT '$sample','Sample from the DGVa study $study_name', $study_id, min(individual_id) FROM individual WHERE name='$subject'});
-      $dbVar->do(qq{ INSERT IGNORE INTO sample (name,description,individual_id) SELECT '$sample','Sample from the DGVa study $study_name', min(individual_id) FROM individual WHERE name='$subject'});
-    }
-  }
-
-  $dbVar->do(q{OPTIMIZE TABLE sample});
-  $dbVar->do(q{OPTIMIZE TABLE individual});
-
-  my $ext1;
-  my $ext2;
-  
-  # For mouse
-  if ($species =~ /mouse|mus/i) {
-    $stmt = qq{
-      INSERT IGNORE INTO $svs_table (
-        structural_variation_id,
-        sample_id,
-        zygosity
-      )
-      SELECT DISTINCT
-        sv.structural_variation_id,
-        s.sample_id,
-        t.zygosity
-      FROM
-        $sv_table sv,
-        $temp_table t
-        LEFT JOIN sample s ON (s.name=t.sample AND s.sample_id IN (select min(sample_id) from sample s2 where s.name=s2.name) AND s.display!='UNDISPLAYABLE')
-      WHERE
-        sv.variation_name=t.id AND
-        (t.sample is not null OR t.subject is not null)
-      };
-  }
-  else {
-    $stmt = qq{
-      INSERT IGNORE INTO $svs_table (
-        structural_variation_id,
-        sample_id,
-        zygosity
-      )
-      SELECT DISTINCT
-        sv.structural_variation_id,
-        s.sample_id,
-        t.zygosity
-      FROM
-        $sv_table sv,
-        $temp_table t
-        LEFT JOIN sample s ON (s.name=t.sample AND s.sample_id IN (select min(sample_id) from sample s2 where s.name=s2.name))
-      WHERE
-        sv.variation_name=t.id AND
-        t.sample is not null
-      };
-  }
-  $dbVar->do($stmt);
-}
-
 
 sub phenotype_feature {
   my $stmt;
@@ -1022,16 +912,12 @@ sub phenotype_feature {
       p.description=tp.phenotype
   };
   $dbVar->do($stmt);
-}  
-
+}
 
 sub drop_tmp_table {
   $dbVar->do(qq{DROP TABLE $temp_table;}) unless ($debug);
   $dbVar->do(qq{DROP TABLE $temp_phen_table;}) unless ($debug);
 }
-
-
-
 
 #### Parsing methods ####
 
@@ -1179,7 +1065,8 @@ sub parse_gvf {
     
       $info->{is_failed} = $is_failed;
                
-      my $data = generate_data_row($info);           
+      my $data = generate_data_row($info);
+      # print "DATA: ", Dumper($data), "\n";
       print OUT (join "\t", @{$data})."\n";
       
       if ($info->{phenotype}) {
@@ -1489,8 +1376,17 @@ sub parse_9th_col {
         $info->{phenotype}{$s_phenotype} = 1;
       }
     }
-    
-    $info->{clinical}    = lc($value) if ($key eq 'clinical_significance' || $key eq 'clinical_int');
+
+    if ($key eq 'clinical_significance' || $key eq 'clinical_int'){
+      # Conflicting is not accepted in column
+      $value =~ s/Conflicting interpretations of pathogenicity/conflicting/;
+      $value =~ s/conflicting data from submitters/conflicting/;
+      # Replace unsupported character, example: 'benign/likely benign' -> 'benign,likely benign'
+      $value =~ s/\//,/;
+      $value =~ s/, /,/;
+      print "C: $value\n";
+      $info->{clinical} = lc($value);
+    }
     $info->{parent}      = $value if ($key eq 'Parent'); # Check how the 'parent' key is spelled
     $info->{is_somatic}  = 1 if ($key eq 'var_origin' && $value =~ /somatic/i);
     $info->{bp_order}    = ($info->{submitter_variant_id} =~ /\w_(\d+)$/) ? $1 : undef;
@@ -1527,18 +1423,7 @@ sub parse_9th_col {
       $value =~ s/, /__/g;
       foreach my $phe (split(',', $value)) {
 
-        print "THIS IS PHENOTYPE: $phe\n";
-
-         if($phe =~ /\+\¦/ || $phe =~ /\÷/ || $phe =~ /\+\¿/ || $phe =~ /\+\¬/){
-           print "- PHENOTYPE BEFORE: $phe\n";
-           $phe =~ s/\+\¦/o/;
-           $phe =~ s/\÷/o/;
-           $phe =~ s/\+\¿/e/;
-           $phe =~ s/\+\¬/e/;
-           print "- PHENOTYPE AFTER: $phe\n";
-         }
-
-        # $phe = replace_char($phe);
+        $phe = decode_text($phe);
 
         $phe =~ s/__/, /g;
         $info->{phenotype}{$phe} = 1;
@@ -1570,13 +1455,6 @@ sub parse_9th_col {
     my @phenotype_links = split(',',$info->{phenotype_link});
 
     foreach my $p_link (@phenotype_links) {
-
-      if($p_link =~ /\+\¦/ || $p_link =~ /\÷/){
-        print "PHENOTYPE BEFORE: $p_link\n";
-        $p_link =~ s/\+\¦/o/;
-        $p_link =~ s/\÷/o/;
-        print "PHENOTYPE AFTER: $p_link\n";
-      }
 
       # Look at the MedGen data
       if ($medgen_file && $p_link =~ /^MedGen:\w+$/i) {
@@ -1611,16 +1489,21 @@ sub parse_9th_col {
   return $info;
 }
 
-
+# Replace weird characters
+# dbVar weird characters are still in the files - replace them here
 sub decode_text {
   my $text = shift;
-  
-  $text  =~ s/%3B/;/g;    
+
+  $text  =~ s/%3B/;/g;
   $text  =~ s/%3D/=/g;
   $text  =~ s/%25/%/g;
   $text  =~ s/%26/&/g;
   $text  =~ s/%2C/,/g;
-  
+  $text  =~ s/\+\¦/o/g;
+  $text  =~ s/\÷/o/g;
+  $text  =~ s/\+\¿/e/g;
+  $text  =~ s/\+\¬/e/g;
+
   return $text;
 }
 
@@ -1671,7 +1554,6 @@ sub pre_processing {
   
 }
 
-
 #### Post processing ####
 
 sub post_processing_annotation {
@@ -1692,14 +1574,13 @@ sub post_processing_annotation {
   } 
 }
 
-
 sub post_processing_feature {
   debug(localtime()." Post processing of the table $svf_table");
   
   my $stmt_s = qq{ UPDATE $svf_table SET outer_start=NULL, inner_start=NULL 
                    WHERE outer_start=seq_region_start AND inner_start=seq_region_start
                  };
-  $dbVar->do($stmt_s);                         
+  $dbVar->do($stmt_s);
 
   my $stmt_e = qq{ UPDATE $svf_table SET outer_end=NULL, inner_end=NULL 
                    WHERE outer_end=seq_region_end AND inner_end=seq_region_end
@@ -1745,7 +1626,6 @@ sub post_processing_sample {
   }
   $sth->finish;
 }
-
 
 # Create entries in phenotype_feature for the structural variation (most of the time, the phenotypes are at the SSV level)
 sub post_processing_phenotype {
@@ -1803,7 +1683,6 @@ sub post_processing_phenotype {
   };
   $dbVar->do($stmt);
 }  
-  
 
 # Update clinical significances at the SV level (the clinical significance is defined at the SSV level)
 sub post_processing_clinical_significance {
@@ -1829,15 +1708,6 @@ sub post_processing_clinical_significance {
   };
   $dbVar->do($stmt);
 
-  my $get_clin_sig = $dbVar->selectall_arrayref(qq{
-    SELECT t.clin_sign FROM $sv_table sv, $temp_clin_table t WHERE sv.structural_variation_id=t.sv_id
-  });
-
-  # $stmst_get_clin_sig->execute();
-
-#   my $clin_sig_x = $stmst_get_clin_sig->fetchrow_array;
-  # print "CLINICAL SIGNIFICANCE: ", Dumper($get_clin_sig), "\n";
-
   my $stmt2 = qq{
     UPDATE $sv_table sv, $temp_clin_table t SET sv.clinical_significance=t.clin_sign WHERE sv.structural_variation_id=t.sv_id;
   };
@@ -1845,7 +1715,6 @@ sub post_processing_clinical_significance {
 
   $dbVar->do(qq{DROP TABLE $temp_clin_table});
 }
-
 
 # Unfail the variants which have at least one good mapping (e.g. Mapping to chromosome 14 'OK' and mapping to sequence NT_187600.1 'Not OK').
 sub post_processing_failed_variants {
@@ -1855,9 +1724,6 @@ sub post_processing_failed_variants {
   
   $dbVar->do($stmt);
 }
-
-
-
 
 #### Finishing methods ####
 
@@ -1892,7 +1758,6 @@ sub verifications {
   }
   debug(localtime()." URL verification: OK") if ($failed_flag == 0);
 }
-
 
 sub cleanup {
   debug(localtime()." Cleanup temporary columns and keys");
@@ -1947,7 +1812,120 @@ sub cleanup {
 
 }
 
+sub structural_variation_sample {
+  my $stmt;
+  
+  debug(localtime()." Inserting into $svs_table table");
 
+  my $study_name = ($dbVar->selectrow_arrayref(qq{SELECT name FROM study WHERE study_id=$study_id;}))->[0];
+
+  # Create strain entries
+  if ($species =~ /mouse|mus/i) {
+    $stmt = qq{ SELECT DISTINCT subject FROM $temp_table 
+                WHERE subject NOT IN (SELECT DISTINCT name from individual WHERE individual_type_id=1)
+              };
+    my $rows_strains = $dbVar->selectall_arrayref($stmt);
+    foreach my $row (@$rows_strains) {
+      my $strain = $row->[0];
+      next if ($strain eq  '');
+    
+      if (!$dbVar->selectrow_arrayref(qq{SELECT individual_id FROM individual WHERE name='$strain' LIMIT 1})) {
+        $dbVar->do(qq{ INSERT IGNORE INTO individual (name,description,gender,individual_type_id) VALUES ('$strain','Strain from the DGVa study $study_name','Unknown',1)});
+      }
+      else{
+        if ($dbVar->selectrow_arrayref(qq{SELECT individual_id FROM individual WHERE name='$strain' AND individual_type_id!=1})) {
+          $dbVar->do(qq{UPDATE individual SET individual_type_id=1 WHERE name='$strain' AND individual_type_id!=1});
+        }
+      }
+    }
+    
+    # Create sample entries
+    $stmt = qq{ SELECT DISTINCT sample, subject FROM $temp_table WHERE is_ssv=1 AND sample NOT IN (SELECT DISTINCT name from sample WHERE study_id=$study_id AND display!="UNDISPLAYABLE")};
+    my $rows_samples = $dbVar->selectall_arrayref($stmt);
+    foreach my $row (@$rows_samples) {
+      my $sample  = $row->[0];
+      my $subject = $row->[1];
+      next if ($sample eq  '' || $subject eq '');
+
+      $dbVar->do(qq{ INSERT IGNORE INTO sample (name,description,study_id,display,individual_id) SELECT '$sample','Sample from the DGVa study $study_name', $study_id,"MARTDISPLAYBLE",min(individual_id) FROM individual WHERE name='$subject' LIMIT 1});
+    }
+  }
+  # Create individual entries (not for mouse)
+  else { 
+    $stmt = qq{ SELECT DISTINCT subject, gender FROM $temp_table WHERE is_ssv=1 AND subject NOT IN (SELECT DISTINCT name from individual)};
+    my $rows_subjects = $dbVar->selectall_arrayref($stmt);
+    foreach my $row (@$rows_subjects) {
+      my $subject = $row->[0];
+      my $gender = ($row->[1] =~ /\w+/) ? $row->[1] : 'Unknown';
+      next if ($subject eq  '');
+
+      my $itype_val = ($species =~ /human|homo/i) ? 3 : 2;
+    
+      $dbVar->do(qq{ INSERT IGNORE INTO individual (name,description,gender,individual_type_id) VALUES ('$subject','Subject from the DGVa study $study_name','$gender',$itype_val)});
+    }
+  
+    # Create sample entries
+    $stmt = qq{ SELECT DISTINCT sample, subject FROM $temp_table WHERE is_ssv=1 AND sample NOT IN (SELECT DISTINCT name from sample)};
+    my $rows_samples = $dbVar->selectall_arrayref($stmt);
+    foreach my $row (@$rows_samples) {
+      my $sample  = $row->[0];
+      my $subject = $row->[1];
+      next if ($sample eq  '' || $subject eq '');
+
+      #$dbVar->do(qq{ INSERT IGNORE INTO sample (name,description,study_id,individual_id) SELECT '$sample','Sample from the DGVa study $study_name', $study_id, min(individual_id) FROM individual WHERE name='$subject'});
+      $dbVar->do(qq{ INSERT IGNORE INTO sample (name,description,individual_id) SELECT '$sample','Sample from the DGVa study $study_name', min(individual_id) FROM individual WHERE name='$subject'});
+    }
+  }
+
+  $dbVar->do(q{OPTIMIZE TABLE sample});
+  $dbVar->do(q{OPTIMIZE TABLE individual});
+
+  my $ext1;
+  my $ext2;
+  
+  # For mouse
+  if ($species =~ /mouse|mus/i) {
+    $stmt = qq{
+      INSERT IGNORE INTO $svs_table (
+        structural_variation_id,
+        sample_id,
+        zygosity
+      )
+      SELECT DISTINCT
+        sv.structural_variation_id,
+        s.sample_id,
+        t.zygosity
+      FROM
+        $sv_table sv,
+        $temp_table t
+        LEFT JOIN sample s ON (s.name=t.sample AND s.sample_id IN (select min(sample_id) from sample s2 where s.name=s2.name) AND s.display!='UNDISPLAYABLE')
+      WHERE
+        sv.variation_name=t.id AND
+        (t.sample is not null OR t.subject is not null)
+      };
+  }
+  else {
+    $stmt = qq{
+      INSERT IGNORE INTO $svs_table (
+        structural_variation_id,
+        sample_id,
+        zygosity
+      )
+      SELECT DISTINCT
+        sv.structural_variation_id,
+        s.sample_id,
+        t.zygosity
+      FROM
+        $sv_table sv,
+        $temp_table t
+        LEFT JOIN sample s ON (s.name=t.sample AND s.sample_id IN (select min(sample_id) from sample s2 where s.name=s2.name))
+      WHERE
+        sv.variation_name=t.id AND
+        t.sample is not null
+      };
+  }
+  $dbVar->do($stmt);
+}
 
 
 #### Other methods ####
@@ -1997,11 +1975,7 @@ sub generate_data_row {
   }
   $info->{phenotype} = decode_text($info->{phenotype}); 
 
-  # print "PHENOTYPE AFTER DECODE: ", Dumper($info->{phenotype}), "\n"; 
- 
   my @row = map { $info->{$_} } @attribs;
-
-  # print "PHENOTYPE AFTER DECODE ROW: ", Dumper(\@row), "\n";
 
   return \@row;
 }
