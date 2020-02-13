@@ -1216,10 +1216,10 @@ sub _finish_annotation {
   $self->get_IntergenicStructuralVariation(1);
 }
 
-=head2 get_freq_minor_allele
+=head2 get_allele_freq
 
-  Example    : $freq = $obj->get_freq_minor_allele()
-  Description: Getter for the frequency of the minor allele, if possible.
+  Example    : $freq = $obj->get_allele_freq()
+  Description: Getter for the frequency of the allele in the study, if possible.
   Returntype : float
   Exceptions : none
   Caller     : general
@@ -1227,9 +1227,25 @@ sub _finish_annotation {
 
 =cut
 
-sub get_freq_minor_allele{
+sub get_allele_freq{
   my $self = shift;
   return $self->{'allele_freq'} if (defined($self->{'allele_freq'}));
+}
+
+=head2 get_allele_count
+
+  Example    : $freq = $obj->get_allele_count()
+  Description: Getter for the number of times the allele is observed in the study, if possible.
+  Returntype : int
+  Exceptions : none
+  Caller     : general
+  Status     : At Risk
+
+=cut
+
+sub get_allele_count{
+  my $self = shift;
+  return $self->{'allele_count'} if (defined($self->{'allele_count'}));
 }
 
 1;

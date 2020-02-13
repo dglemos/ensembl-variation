@@ -25,8 +25,6 @@ use Bio::EnsEMBL::Variation::Study;
 use_ok('Bio::EnsEMBL::Variation::StructuralVariation');
 use_ok('Bio::EnsEMBL::Variation::StructuralVariationFeature');
 
-use Data::Dumper;
-
 my $multi = Bio::EnsEMBL::Test::MultiTestDB->new('homo_sapiens');
 
 my $vdb = $multi->get_DBAdaptor('variation');
@@ -194,6 +192,13 @@ my $slice = $slice_adaptor->fetch_by_region('chromosome', $svf3_chr);
 my $svf3_new = $svf3_contig->transfer($slice);
 ok($svf3_new->seq_region_name eq $svf3_chr && $svf3_new->seq_region_start == $chr_start && $svf3_new->seq_region_end == $chr_end, 'transfert from contig to chr');
 
+# Get frequency and count
+$svf_id = 120047491;
+$svf2 = $svf_adaptor->fetch_by_dbID($svf_id);
+my $freq = $svf2->get_allele_freq();
+ok($freq == 0.03, 'get_allele_freq');
 
+my $count = $svf2->get_allele_count();
+ok($count == 4, 'get_allele_count');
 done_testing();
 
