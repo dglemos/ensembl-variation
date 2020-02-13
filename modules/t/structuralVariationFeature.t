@@ -25,6 +25,7 @@ use Bio::EnsEMBL::Variation::Study;
 use_ok('Bio::EnsEMBL::Variation::StructuralVariation');
 use_ok('Bio::EnsEMBL::Variation::StructuralVariationFeature');
 
+use Data::Dumper;
 
 my $multi = Bio::EnsEMBL::Test::MultiTestDB->new('homo_sapiens');
 

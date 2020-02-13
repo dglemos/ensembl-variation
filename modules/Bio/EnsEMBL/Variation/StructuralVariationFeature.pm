@@ -186,7 +186,9 @@ sub new {
     $length,
     $source,
     $study,
-    $structural_variation
+    $structural_variation,
+    $allele_freq,
+    $allele_count
   ) = rearrange([qw(
   VARIATION_NAME 
   _STRUCTURAL_VARIATION_ID
@@ -204,6 +206,8 @@ sub new {
   SOURCE
   STUDY
   STRUCTURAL_VARIATION
+  ALLELE_FREQ
+  ALLELE_COUNT
   )], @_);
 
 
@@ -223,6 +227,8 @@ sub new {
   $self->{'source'}                   = $source;
   $self->{'study'}                    = $study;
   $self->{'structural_variation'}     = $structural_variation;
+  $self->{'allele_freq'}              = $allele_freq;
+  $self->{'allele_count'}             = $allele_count;
   return $self;
 }
 
@@ -1208,6 +1214,22 @@ sub _finish_annotation {
   $self->{$_.'_structural_variations'} ||= {} for qw(transcript regulation);
   $self->{regulation_structural_variations}->{$_} ||= [] for qw(ExternalFeature MotifFeature RegulatoryFeature);
   $self->get_IntergenicStructuralVariation(1);
+}
+
+=head2 get_freq_minor_allele
+
+  Example    : $freq = $obj->get_freq_minor_allele()
+  Description: Getter for the frequency of the minor allele, if possible.
+  Returntype : float
+  Exceptions : none
+  Caller     : general
+  Status     : At Risk
+
+=cut
+
+sub get_freq_minor_allele{
+  my $self = shift;
+  return $self->{'allele_freq'} if (defined($self->{'allele_freq'}));
 }
 
 1;
