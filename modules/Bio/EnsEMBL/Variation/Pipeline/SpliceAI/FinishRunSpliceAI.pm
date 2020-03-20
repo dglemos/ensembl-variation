@@ -31,7 +31,7 @@ package Bio::EnsEMBL::Variation::Pipeline::SpliceAI::FinishRunSpliceAI;
 
 use strict;
 use warnings;
-use base ('Bio::EnsEMBL::Variation::Pipeline::SpliceAI::BaseVariationProcess');
+use base ('Bio::EnsEMBL::Variation::Pipeline::BaseVariationProcess');
 
 use FileHandle;
 
