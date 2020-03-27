@@ -58,9 +58,9 @@ sub default_options {
         hive_use_param_stack => 1,
 
         pipeline_name         => $self->o('pipeline_name'),
-        main_dir              => $self->o('main_dir'), # homo_sapiens_dump_dir = '/gpfs/nobackup/ensembl/dlemos/spliceai/Ensembl_input_files/all_snps_files_from_main_file_gene/'
-        input_dir             => $self->o('input_dir'), # homo_sapiens_dump_dir = '/gpfs/nobackup/ensembl/dlemos/spliceai/Ensembl_input_files/all_snps_files_from_main_file_gene/TMP'
-        output_dir            => $self->o('output_dir'), # vep_cache_dir = '/gpfs/nobackup/ensembl/dlemos/spliceai/Ensembl_output_files/output_transcripts_gene/PIPELINE_TMP'
+        main_dir              => $self->o('main_dir'), # main_dir = '/gpfs/nobackup/ensembl/dlemos/spliceai/Ensembl_input_files/all_snps_files_from_main_file_gene/'
+        input_dir             => $self->o('input_dir'), # input_dir = '/gpfs/nobackup/ensembl/dlemos/spliceai/Ensembl_input_files/all_snps_files_from_main_file_gene/TMP'
+        output_dir            => $self->o('output_dir'), # output_dir = '/gpfs/nobackup/ensembl/dlemos/spliceai/Ensembl_output_files/PIPELINE_TMP'
         fasta_file            => $self->o('fasta_file'), # '/hps/nobackup2/production/ensembl/dlemos/files/Homo_sapiens.GRCh38.dna.toplevel.fa'
         gene_annotation       => $self->o('gene_annotation'), # '/homes/dlemos/work/tools/SpliceAI_files_output/gene_annotation/ensembl_gene/grch38_MANE_8_7.txt'
         step_size             => 50,
@@ -83,9 +83,9 @@ sub resource_classes {
     my ($self) = @_;
     return {
         %{$self->SUPER::resource_classes},
-        'default' => { 'LSF' => '-q production-rh74 -R"select[mem>4000] rusage[mem=4000]" -M4000'},
-        'medium'  => { 'LSF' => '-q production-rh74 -R"select[mem>6000] rusage[mem=6000]" -M6000'},
-        'high'    => { 'LSF' => '-q production-rh74 -R"select[mem>8500] rusage[mem=8500]" -M8500'},
+        'default' => { 'LSF' => '-n 16 -q production-rh74 -R"select[mem>4000] rusage[mem=4000]" -M4000'},
+        'medium'  => { 'LSF' => '-n 16 -q production-rh74 -R"select[mem>6000] rusage[mem=6000]" -M6000'},
+        'high'    => { 'LSF' => '-n 16 -q production-rh74 -R"select[mem>8500] rusage[mem=8500]" -M8500'},
     };
 }
 
@@ -94,7 +94,7 @@ sub pipeline_analyses {
   my @analyses;
   push @analyses, (
       # pre run checks, directories exist etc
-      {   -logic_name => 'init_files', # init_gvf_files
+      {   -logic_name => 'init_files',
           -module     => 'Bio::EnsEMBL::Hive::RunnableDB::JobFactory',
           -input_ids  => [{}],
           -parameters => {
@@ -102,7 +102,30 @@ sub pipeline_analyses {
             'inputcmd'  => 'find #input_dir# -type f -name "all_snps_ensembl_38_*.vcf" -printf "%f\n"',
           },
           -flow_into  => {
-            '2->A' => {'run_spliceai' => {'input_file' => '#_0#'}},
+            '2->A' => {'split_files' => {'input_file' => '#_0#'}},
+            'A->1' => ['init_spliceai'],
+          },
+      },
+      { -logic_name => 'split_files',
+        -module => 'Bio::EnsEMBL::Variation::Pipeline::SpliceAI::SplitFiles',
+        -parameters => {
+          'main_dir'              => $self->o('main_dir'),
+          'input_dir'             => $self->o('input_dir'),
+          'output_dir'            => $self->o('output_dir'),
+          'step_size'             => $self->o('step_size'),
+        },
+      },
+      {   -logic_name => 'init_spliceai',
+          -module     => 'Bio::EnsEMBL::Hive::RunnableDB::JobFactory',
+          -input_ids  => [{}],
+          -parameters => {
+            'input_dir' => $self->o('main_dir') . "/splited_files_input", # TODO directory should be the output from 'split_files': $self->o('main_dir') . "/splited_files_input/chrx"
+            # 'input_dir' => $self->o('new_input_dir'),
+            'inputcmd'  => 'ls #input_dir#',
+          },
+          -flow_into  => {
+            '2->A' => {'run_spliceai' => {'new_input_dir' => '#_0#'}},
+            # '2->A' => {'run_spliceai' => INPUT_PLUS()},
             'A->1' => ['finish_files'],
           },
       },
@@ -110,11 +133,9 @@ sub pipeline_analyses {
         -module => 'Bio::EnsEMBL::Variation::Pipeline::SpliceAI::RunSpliceAI',
         -parameters => {
           'main_dir'              => $self->o('main_dir'),
-          'input_dir'             => $self->o('input_dir'),
           'output_dir'            => $self->o('output_dir'),
           'fasta_file'            => $self->o('fasta_file'),
           'gene_annotation'       => $self->o('gene_annotation'),
-          'step_size'             => $self->o('step_size'),
           'output_file_name'      => $self->o('output_file_name'),
         },
       },
