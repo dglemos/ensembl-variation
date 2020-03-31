@@ -114,4 +114,10 @@ sub split_input_file {
   $self->param('new_input_dir', $new_input_dir);
 }
 
+# sub write_output {
+#   my $self = shift;
+#   my $new_input_dir =  $self->param('new_input_dir');
+#   $self->dataflow_output_id({'new_input_dir' => $new_input_dir}, 1);
+# }
+
 1;

@@ -102,12 +102,9 @@ sub pipeline_analyses {
             'inputcmd'  => 'find #input_dir# -type f -name "all_snps_ensembl_38_*.vcf" -printf "%f\n"',
           },
           -flow_into  => {
-            2 => {'split_files' => {'input_file' => '#_0#'}},
+            '2->A' => {'split_files' => {'input_file' => '#_0#'}},
+            'A->1' => ['init_spliceai'],
           },
-          # -flow_into  => {
-          #   '2->A' => {'split_files' => {'input_file' => '#_0#'}},
-          #   'A->1' => ['read_files'],
-          # },
       },
       { -logic_name => 'split_files',
         -module => 'Bio::EnsEMBL::Variation::Pipeline::SpliceAI::SplitFiles',
@@ -117,27 +114,6 @@ sub pipeline_analyses {
           'output_dir'            => $self->o('output_dir'),
           'step_size'             => $self->o('step_size'),
         },
-          -flow_into  => {
-            2 => ['read_files'],
-        },
-      },
-      {   -logic_name => 'read_files',
-          -module     => 'Bio::EnsEMBL::Hive::RunnableDB::JobFactory',
-          -input_ids  => [{}],
-          -parameters => {
-            'input_dir' => $self->o('main_dir') . "/splited_files_input", # TODO directory should be the output from 'split_files': $self->o('main_dir') . "/splited_files_input/chrx"
-            # 'input_dir' => '#new_input_dir#',
-            'inputcmd'  => 'ls #input_dir#',
-            # 'inputcmd'  => 'find #new_input_dir# -type f -name "all_snps_ensembl_38_*.vcf" -printf "%f\n"',
-            # 'column_names' => ['input_dir_3'],
-          },
-          -flow_into  => {
-            # 2 => [ 'init_spliceai' ],
-            # 2 => {'init_spliceai' => INPUT_PLUS()},
-            2 => {'init_spliceai' => {'input_dir' => '#_0#'}},
-            # '2->A' => {'run_spliceai' => INPUT_PLUS()},
-            # 'A->1' => ['run_spliceai'],
-          },
       },
       {   -logic_name => 'init_spliceai',
           -module     => 'Bio::EnsEMBL::Hive::RunnableDB::JobFactory',
@@ -146,7 +122,7 @@ sub pipeline_analyses {
             # 'input_dir' => $self->o('main_dir') . "/splited_files_input", # TODO directory should be the output from 'split_files': $self->o('main_dir') . "/splited_files_input/chrx"
             # 'input_dir' => '#new_input_dir#',
             # 'inputcmd'  => 'ls #input_dir#',
-            'inputcmd'  => 'find #input_dir# -type f -name "all_snps_ensembl_38_*.vcf" -printf "%f\n"',
+            'inputcmd'  => 'find #new_input_dir# -type f -name "all_snps_ensembl_38_*.vcf" -printf "%f\n"',
           },
           -flow_into  => {
             '2->A' => {'run_spliceai' => {'input_file' => '#_0#'}},
