@@ -46,7 +46,8 @@ sub run {
 sub set_chr_from_filename {
   my $self = shift;
   my $input_file = $self->param_required('input_file');
-  $input_file =~ /.*_chr(.*)\.vcf/;
+  #all_snps_ensembl_38_13.vcf
+  $input_file =~ /.*_(.*)\.vcf$/;
   my $chr = $1; 
   if (!$chr) {
     die("Could not get chromosome name from file name ($input_file).");
@@ -109,7 +110,7 @@ sub split_input_file {
   }
   close($read_dir);
 
-  $self->run_system_command("rm -rf $main_dir/splited_files");
+  $self->run_system_command("rm -rf $main_dir/splited_files/chr$chr");
 
   $self->param('new_input_dir', $new_input_dir);
 }
