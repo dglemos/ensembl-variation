@@ -123,6 +123,8 @@ sub run_spliceai {
 
   my $cmd = "spliceai -I $input_dir/$input_file -O $output_vcf_files_dir/$input_file -R $fasta_file -A $gene_annotation";
   my ($exit_code, $stderr, $flat_cmd) = $self->run_system_command($cmd);
+
+  $self->warning('Error: ' . $stderr . ' Code: ' . $exit_code);
 }
 
 1;
