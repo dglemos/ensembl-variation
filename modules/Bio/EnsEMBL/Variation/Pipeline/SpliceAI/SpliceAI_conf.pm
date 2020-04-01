@@ -58,7 +58,7 @@ sub default_options {
         step_size             => 100_000,
         output_file_name      => 'spliceai_scores_chr_',
 
-        pipeline_wide_analysis_capacity => 80,
+        pipeline_wide_analysis_capacity => 100,
 
         pipeline_db => {
             -host   => $self->o('hive_db_host'),
