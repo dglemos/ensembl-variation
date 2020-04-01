@@ -46,8 +46,9 @@ sub run {
 sub set_chr_from_filename {
   my $self = shift;
   my $input_file = $self->param_required('input_file');
-  $input_file =~ /.*_chr(.*)\.vcf/;
-  my $chr = $1; 
+  #all_snps_ensembl_38_13.vcf
+  $input_file =~ /.*_chr(.*)\.vcf$/;
+  my $chr = $1;
   if (!$chr) {
     die("Could not get chromosome name from file name ($input_file).");
   }
@@ -59,6 +60,7 @@ sub split_input_file {
   my $vcf_file = $self->param_required('input_file');
   my $main_dir = $self->param_required('main_dir');
   my $input_dir = $self->param_required('input_dir');
+  my $output_dir = $self->param_required('output_dir');
   my $step_size = $self->param_required('step_size');
 
   if (! -d $input_dir) {
@@ -109,7 +111,17 @@ sub split_input_file {
   }
   close($read_dir);
 
-  $self->run_system_command("rm -rf $main_dir/splited_files");
+  # Create output directory
+  my $output_dir_chr = $output_dir."/chr".$chr;
+  $self->create_dir($output_dir_chr);
+
+  my $out_files_dir = $output_dir_chr."/out_files";
+  my $output_vcf_files_dir = $output_dir_chr."/vcf_files";
+  $self->create_dir($out_files_dir);
+  $self->create_dir($output_vcf_files_dir);
+
+  # $self->run_system_command("rm -rf $main_dir/splited_files");
+  # $self->run_system_command("rm -rf $main_dir/splited_files/chr$chr");
 
   $self->param('new_input_dir', $new_input_dir);
 }

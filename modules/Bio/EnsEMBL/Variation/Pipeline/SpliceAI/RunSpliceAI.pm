@@ -46,7 +46,7 @@ sub run {
 sub set_chr_from_filename {
   my $self = shift;
   my $input_file = $self->param_required('input_file');
-  $input_file =~ /.*chr(.*).[a-z]+.vcf/;
+  $input_file =~ /.*chr(.*)\.[a-z]+.vcf/;
   my $chr = $1; 
   if (!$chr) {
     die("Could not get chromosome name from file name ($input_file).");
@@ -111,12 +111,12 @@ sub run_spliceai {
   }
 
   my $output_dir_chr = $output_dir."/chr".$chr;
-  $self->create_dir($output_dir_chr);
-
   my $out_files_dir = $output_dir_chr."/out_files";
   my $output_vcf_files_dir = $output_dir_chr."/vcf_files";
-  $self->create_dir($out_files_dir);
-  $self->create_dir($output_vcf_files_dir);
+
+  if (! -d $output_vcf_files_dir) {
+    die("Directory ($output_vcf_files_dir) doesn't exist");
+  }
 
   my $err = $out_files_dir."/".$input_file.".err";
   my $out = $out_files_dir."/".$input_file.".out";

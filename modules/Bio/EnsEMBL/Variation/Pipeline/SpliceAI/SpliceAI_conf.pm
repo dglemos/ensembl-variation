@@ -1,31 +1,23 @@
 =head1 LICENSE
-
 Copyright [1999-2015] Wellcome Trust Sanger Institute and the EMBL-European Bioinformatics Institute
 Copyright [2016-2020] EMBL-European Bioinformatics Institute
-
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
-
      http://www.apache.org/licenses/LICENSE-2.0
-
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-
 =cut
 
 
 =head1 CONTACT
-
  Please email comments or questions to the public Ensembl
  developers list at <http://lists.ensembl.org/mailman/listinfo/dev>.
-
  Questions may also be sent to the Ensembl help desk at
  <http://www.ensembl.org/Help/Contact>.
-
 =cut
 package Bio::EnsEMBL::Variation::Pipeline::SpliceAI::SpliceAI_conf;
 
@@ -63,16 +55,16 @@ sub default_options {
         output_dir            => $self->o('output_dir'), # output_dir = '/gpfs/nobackup/ensembl/dlemos/spliceai/Ensembl_output_files/PIPELINE_TMP'
         fasta_file            => $self->o('fasta_file'), # '/hps/nobackup2/production/ensembl/dlemos/files/Homo_sapiens.GRCh38.dna.toplevel.fa'
         gene_annotation       => $self->o('gene_annotation'), # '/homes/dlemos/work/tools/SpliceAI_files_output/gene_annotation/ensembl_gene/grch38_MANE_8_7.txt'
-        step_size             => 50,
+        step_size             => 100_000,
         output_file_name      => 'spliceai_scores_chr_',
 
-        pipeline_wide_analysis_capacity => 25,        
+        pipeline_wide_analysis_capacity => 80,
 
         pipeline_db => {
             -host   => $self->o('hive_db_host'),
             -port   => $self->o('hive_db_port'),
             -user   => $self->o('hive_db_user'),
-            -pass   => $self->o('hive_db_password'),            
+            -pass   => $self->o('hive_db_password'),
             -dbname => $ENV{'USER'} . '_' . $self->o('pipeline_name'),
             -driver => 'mysql',
         },
@@ -94,20 +86,18 @@ sub pipeline_analyses {
   my @analyses;
   push @analyses, (
       # pre run checks, directories exist etc
+
       {   -logic_name => 'init_files',
           -module     => 'Bio::EnsEMBL::Hive::RunnableDB::JobFactory',
           -input_ids  => [{}],
           -parameters => {
             'input_dir' => $self->o('input_dir'),
-            'inputcmd'  => 'find #input_dir# -type f -name "all_snps_ensembl_38_*.vcf" -printf "%f\n"',
+            'inputcmd' => 'find #input_dir# -type f -name "all_snps_ensembl_38_*.vcf" -printf "%f\n"',
           },
           -flow_into  => {
-            2 => {'split_files' => {'input_file' => '#_0#'}},
+            '2->A' => {'split_files' => {'input_file' => '#_0#'}},
+            'A->1' => ['get_chr_dir'],
           },
-          # -flow_into  => {
-          #   '2->A' => {'split_files' => {'input_file' => '#_0#'}},
-          #   'A->1' => ['read_files'],
-          # },
       },
       { -logic_name => 'split_files',
         -module => 'Bio::EnsEMBL::Variation::Pipeline::SpliceAI::SplitFiles',
@@ -117,45 +107,33 @@ sub pipeline_analyses {
           'output_dir'            => $self->o('output_dir'),
           'step_size'             => $self->o('step_size'),
         },
-          -flow_into  => {
-            2 => ['read_files'],
-        },
       },
-      {   -logic_name => 'read_files',
-          -module     => 'Bio::EnsEMBL::Hive::RunnableDB::JobFactory',
-          -input_ids  => [{}],
-          -parameters => {
-            'input_dir' => $self->o('main_dir') . "/splited_files_input", # TODO directory should be the output from 'split_files': $self->o('main_dir') . "/splited_files_input/chrx"
-            # 'input_dir' => '#new_input_dir#',
-            'inputcmd'  => 'ls #input_dir#',
-            # 'inputcmd'  => 'find #new_input_dir# -type f -name "all_snps_ensembl_38_*.vcf" -printf "%f\n"',
-            # 'column_names' => ['input_dir_3'],
-          },
-          -flow_into  => {
-            # 2 => [ 'init_spliceai' ],
-            # 2 => {'init_spliceai' => INPUT_PLUS()},
-            2 => {'init_spliceai' => {'input_dir' => '#_0#'}},
-            # '2->A' => {'run_spliceai' => INPUT_PLUS()},
-            # 'A->1' => ['run_spliceai'],
-          },
+      { -logic_name => 'get_chr_dir',
+        -module => 'Bio::EnsEMBL::Hive::RunnableDB::JobFactory',
+        -parameters => {
+          'input_dir' => $self->o('main_dir') . "/splited_files_input",
+          'inputcmd'  => 'ls #input_dir#',
+        },
+        -flow_into => { 
+          '2->A' => {'init_spliceai' => {'input_chr_dir' => '#_0#'}},
+          'A->1' => ['finish_files'],
+        },
       },
       {   -logic_name => 'init_spliceai',
           -module     => 'Bio::EnsEMBL::Hive::RunnableDB::JobFactory',
-          -input_ids  => [{}],
           -parameters => {
-            # 'input_dir' => $self->o('main_dir') . "/splited_files_input", # TODO directory should be the output from 'split_files': $self->o('main_dir') . "/splited_files_input/chrx"
-            # 'input_dir' => '#new_input_dir#',
+            'input_dir' => $self->o('main_dir') . "/splited_files_input/" . "#input_chr_dir#",
             # 'inputcmd'  => 'ls #input_dir#',
             'inputcmd'  => 'find #input_dir# -type f -name "all_snps_ensembl_38_*.vcf" -printf "%f\n"',
           },
           -flow_into  => {
-            '2->A' => {'run_spliceai' => {'input_file' => '#_0#'}},
-            # '2->A' => {'run_spliceai' => INPUT_PLUS()},
-            'A->1' => ['finish_files'],
-          },
+            2 => {'run_spliceai' => {'input_file' => '#_0#'}},
+          }
       },
       { -logic_name => 'run_spliceai',
         -module => 'Bio::EnsEMBL::Variation::Pipeline::SpliceAI::RunSpliceAI',
+        # -hive_capacity => $self->o('pipeline_wide_analysis_capacity'),
+        -analysis_capacity => $self->o('pipeline_wide_analysis_capacity'),
         -parameters => {
           'main_dir'              => $self->o('main_dir'),
           'output_dir'            => $self->o('output_dir'),
