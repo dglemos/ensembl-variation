@@ -45,69 +45,31 @@ sub run {
 
 sub set_chr_from_filename {
   my $self = shift;
-  my $input_file = $self->param_required('input_file');
-  $input_file =~ /.*chr(.*)\.[a-z]+.vcf/;
+  my $vcf_file = $self->param('input_file');
+  $vcf_file =~ /.*chr(.*)\.[a-z]+.vcf/;
   my $chr = $1; 
   if (!$chr) {
-    die("Could not get chromosome name from file name ($input_file).");
+    die("Could not get chromosome name from file name ($vcf_file).");
   }
   $self->param('chr', $chr);
-}
-
-sub run_spliceai_old {
-  my $self = shift;
-  my $main_dir = $self->param_required('main_dir');
-  # my $input_dir = $main_dir."/splited_files_input/".$self->param('new_input_dir'); # $main_dir/splited_files_input/chr$chr
-  my $input_dir = $self->param('new_input_dir');
-  my $output_dir = $self->param_required('output_dir');
-  my $fasta_file = $self->param_required('fasta_file');
-  my $gene_annotation = $self->param_required('gene_annotation');
-
-  if (! -d $input_dir) {
-    die("Directory ($input_dir) doesn't exist");
-  }
-
-  my $chr = $self->param('chr');
-
-  my $output_dir_chr = $output_dir."/chr".$chr;
-  $self->create_dir($output_dir_chr);
-
-  my $out_files_dir = $output_dir_chr."/out_files";
-  my $output_vcf_files_dir = $output_dir_chr."/vcf_files";
-  $self->create_dir($out_files_dir);
-  $self->create_dir($output_vcf_files_dir);
-
-  opendir(my $write, $input_dir) or die $!;
-
-  while(my $vcf = readdir($write)) {
-    next if ($vcf =~ m/^\./);
-
-    my $err = $out_files_dir."/".$vcf.".err";
-    my $out = $out_files_dir."/".$vcf.".out";
-
-    my $cmd = "spliceai -I $input_dir/$vcf -O $output_vcf_files_dir/$vcf -R $fasta_file -A $gene_annotation";
-    my ($exit_code, $stderr, $flat_cmd) = $self->run_system_command($cmd);
-  }
-  close($write);
-
 }
 
 sub run_spliceai {
   my $self = shift;
   my $main_dir = $self->param_required('main_dir');
-  # my $input_dir = $main_dir."/splited_files_input/".$self->param('new_input_dir'); # $main_dir/splited_files_input/chr$chr
-  # my $input_dir = $self->param('new_input_dir');
-  my $input_file = $self->param('input_file');
+  # my $vcf_input_dir = $main_dir."/splited_files_input/".$self->param('new_input_dir'); # $main_dir/splited_files_input/chr$chr
+  my $vcf_input_dir = $self->param('vcf_input_dir'); # $self->o('main_dir') . '/splited_vcf_input'
+  my $vcf_file = $self->param('input_file');
   my $output_dir = $self->param_required('output_dir');
   my $fasta_file = $self->param_required('fasta_file');
   my $gene_annotation = $self->param_required('gene_annotation');
 
   my $chr = $self->param('chr');
 
-  my $input_dir = $main_dir."/splited_files_input/chr".$chr;
+  my $vcf_input_dir_chr = $vcf_input_dir.'/chr'.$chr;
 
-  if (! -d $input_dir) {
-    die("Directory ($input_dir) doesn't exist");
+  if (! -d $vcf_input_dir_chr) {
+    die("Directory ($vcf_input_dir_chr) doesn't exist");
   }
 
   my $output_dir_chr = $output_dir."/chr".$chr;
@@ -118,11 +80,13 @@ sub run_spliceai {
     die("Directory ($output_vcf_files_dir) doesn't exist");
   }
 
-  my $err = $out_files_dir."/".$input_file.".err";
-  my $out = $out_files_dir."/".$input_file.".out";
+  my $err = $out_files_dir."/".$vcf_file.".err";
+  my $out = $out_files_dir."/".$vcf_file.".out";
 
-  my $cmd = "spliceai -I $input_dir/$input_file -O $output_vcf_files_dir/$input_file -R $fasta_file -A $gene_annotation";
+  my $cmd = "spliceai -I $vcf_input_dir_chr/$vcf_file -O $output_vcf_files_dir/$vcf_file -R $fasta_file -A $gene_annotation";
   my ($exit_code, $stderr, $flat_cmd) = $self->run_system_command($cmd);
+  
+  $self->warning('Error: ' . $stderr . ' Code: ' . $exit_code);
 }
 
 1;

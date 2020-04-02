@@ -50,13 +50,15 @@ sub default_options {
         hive_use_param_stack => 1,
 
         pipeline_name         => $self->o('pipeline_name'),
-        main_dir              => $self->o('main_dir'), # main_dir = '/gpfs/nobackup/ensembl/dlemos/spliceai/Ensembl_input_files/all_snps_files_from_main_file_gene/'
-        input_dir             => $self->o('input_dir'), # input_dir = '/gpfs/nobackup/ensembl/dlemos/spliceai/Ensembl_input_files/all_snps_files_from_main_file_gene/TMP'
-        output_dir            => $self->o('output_dir'), # output_dir = '/gpfs/nobackup/ensembl/dlemos/spliceai/Ensembl_output_files/PIPELINE_TMP'
+        main_dir              => $self->o('main_dir'), # main_dir = '/hps/nobackup2/production/ensembl/dlemos/tmp_spliceai_pipeline'
+        input_dir             => $self->o('main_dir') . '/input_vcf_files', # input_dir = '/hps/nobackup2/production/ensembl/dlemos/tmp_spliceai_pipeline/input_vcf_files'
+        tmp_output_dir        => $self->o('main_dir') . '/tmp_output', # output_dir = '/hps/nobackup2/production/ensembl/dlemos/tmp_spliceai_pipeline/tmp_output'
+        output_dir            => $self->o('main_dir') . '/output', # output_dir = '/hps/nobackup2/production/ensembl/dlemos/tmp_spliceai_pipeline/output'
         fasta_file            => $self->o('fasta_file'), # '/hps/nobackup2/production/ensembl/dlemos/files/Homo_sapiens.GRCh38.dna.toplevel.fa'
         gene_annotation       => $self->o('gene_annotation'), # '/homes/dlemos/work/tools/SpliceAI_files_output/gene_annotation/ensembl_gene/grch38_MANE_8_7.txt'
-        step_size             => 100_000,
-        output_file_name      => 'spliceai_scores_chr_',
+        # step_size             => 100_000,
+        step_size             => 50,
+        output_file_name      => 'spliceai_scores_chr',
 
         pipeline_wide_analysis_capacity => 80,
 
@@ -65,7 +67,7 @@ sub default_options {
             -port   => $self->o('hive_db_port'),
             -user   => $self->o('hive_db_user'),
             -pass   => $self->o('hive_db_password'),
-            -dbname => $ENV{'USER'} . '_' . $self->o('pipeline_name'),
+            -dbname => $ENV{'USER'} . '_hive_' . $self->o('pipeline_name'),
             -driver => 'mysql',
         },
     };
@@ -95,35 +97,35 @@ sub pipeline_analyses {
             'inputcmd' => 'find #input_dir# -type f -name "all_snps_ensembl_38_*.vcf" -printf "%f\n"',
           },
           -flow_into  => {
-            '2->A' => {'split_files' => {'input_file' => '#_0#'}},
+            '2->A' => {'split_files' => {'vcf_file' => '#_0#'}},
             'A->1' => ['get_chr_dir'],
           },
       },
       { -logic_name => 'split_files',
         -module => 'Bio::EnsEMBL::Variation::Pipeline::SpliceAI::SplitFiles',
+        -analysis_capacity => $self->o('pipeline_wide_analysis_capacity'),
         -parameters => {
           'main_dir'              => $self->o('main_dir'),
           'input_dir'             => $self->o('input_dir'),
-          'output_dir'            => $self->o('output_dir'),
+          'output_dir'            => $self->o('tmp_output_dir'),
           'step_size'             => $self->o('step_size'),
         },
       },
       { -logic_name => 'get_chr_dir',
         -module => 'Bio::EnsEMBL::Hive::RunnableDB::JobFactory',
         -parameters => {
-          'input_dir' => $self->o('main_dir') . "/splited_files_input",
+          'input_dir' => $self->o('main_dir') . '/splited_vcf_input',
           'inputcmd'  => 'ls #input_dir#',
         },
         -flow_into => { 
           '2->A' => {'init_spliceai' => {'input_chr_dir' => '#_0#'}},
-          'A->1' => ['finish_files'],
+          'A->1' => ['init_finish_files'],
         },
       },
       {   -logic_name => 'init_spliceai',
           -module     => 'Bio::EnsEMBL::Hive::RunnableDB::JobFactory',
           -parameters => {
-            'input_dir' => $self->o('main_dir') . "/splited_files_input/" . "#input_chr_dir#",
-            # 'inputcmd'  => 'ls #input_dir#',
+            'input_dir' => $self->o('main_dir') . '/splited_vcf_input/' . '#input_chr_dir#',
             'inputcmd'  => 'find #input_dir# -type f -name "all_snps_ensembl_38_*.vcf" -printf "%f\n"',
           },
           -flow_into  => {
@@ -136,16 +138,28 @@ sub pipeline_analyses {
         -analysis_capacity => $self->o('pipeline_wide_analysis_capacity'),
         -parameters => {
           'main_dir'              => $self->o('main_dir'),
-          'output_dir'            => $self->o('output_dir'),
+          'vcf_input_dir'         => $self->o('main_dir') . '/splited_vcf_input',
+          'output_dir'            => $self->o('tmp_output_dir'),
           'fasta_file'            => $self->o('fasta_file'),
           'gene_annotation'       => $self->o('gene_annotation'),
           'output_file_name'      => $self->o('output_file_name'),
         },
       },
+      { -logic_name => 'init_finish_files',
+        -module => 'Bio::EnsEMBL::Hive::RunnableDB::JobFactory',
+        -parameters => {
+          'input_dir' => $self->o('tmp_output_dir'),
+          'inputcmd'  => 'ls #input_dir#',
+        },
+        -flow_into => { 
+          1 => {'finish_files' => {'chr_dir' => '#_0#'}},
+        },
+      },
       { -logic_name => 'finish_files',
         -module => 'Bio::EnsEMBL::Variation::Pipeline::SpliceAI::FinishRunSpliceAI',
         -parameters => {
-          'input_dir'             => $self->o('input_dir'),
+          'input_dir'             => $self->o('tmp_output_dir'),
+          'output_dir'            => $self->o('output_dir'),
           'output_file_name'      => $self->o('output_file_name'),
         },
       }
