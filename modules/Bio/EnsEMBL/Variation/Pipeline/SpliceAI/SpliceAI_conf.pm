@@ -156,7 +156,7 @@ sub pipeline_analyses {
         },
       },
       { -logic_name => 'finish_files',
-        -module => 'Bio::EnsEMBL::Variation::Pipeline::SpliceAI::FinishRunSpliceAI',
+        -module => 'Bio::EnsEMBL::Variation::Pipeline::SpliceAI::FinishFiles',
         -parameters => {
           'input_dir'             => $self->o('tmp_output_dir'),
           'output_dir'            => $self->o('output_dir'),

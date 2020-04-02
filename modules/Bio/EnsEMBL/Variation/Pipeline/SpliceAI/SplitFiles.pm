@@ -75,7 +75,7 @@ sub split_vcf_file {
 
   my $chr = $self->param('chr');
 
-  my $tmp_splited_vcf_chr_dir = $main_dir.'/splited_vcf/chr$chr';
+  my $tmp_splited_vcf_chr_dir = $main_dir.'/splited_vcf/chr'.$chr;
   my $new_file = $tmp_splited_vcf_chr_dir.'/all_snps_ensembl_38_chr'.$chr.'.';
 
   $self->create_dir($tmp_splited_vcf_chr_dir);
@@ -84,7 +84,7 @@ sub split_vcf_file {
   # Files splited by number of lines (from input)
   # These files contain vcf header
   # Files that are going to be used as input for SpliceAI
-  my $splited_vcf_dir = $main_dir.'/splited_vcf_input/chr$chr';
+  my $splited_vcf_dir = $main_dir.'/splited_vcf_input/chr'.$chr;
 
   $self->create_dir($splited_vcf_dir);
 
