@@ -52,13 +52,15 @@ sub default_options {
         pipeline_name         => $self->o('pipeline_name'),
         main_dir              => $self->o('main_dir'), # main_dir = '/hps/nobackup2/production/ensembl/dlemos/tmp_spliceai_pipeline'
         input_dir             => $self->o('main_dir') . '/input_vcf_files', # input_dir = '/hps/nobackup2/production/ensembl/dlemos/tmp_spliceai_pipeline/input_vcf_files'
+        tmp_splited_vcf_dir   => $self->o('main_dir') . '/splited_vcf',
+        splited_vcf_input_dir => $self->o('main_dir') . '/splited_vcf_input',
         tmp_output_dir        => $self->o('main_dir') . '/tmp_output', # output_dir = '/hps/nobackup2/production/ensembl/dlemos/tmp_spliceai_pipeline/tmp_output'
         output_dir            => $self->o('main_dir') . '/output', # output_dir = '/hps/nobackup2/production/ensembl/dlemos/tmp_spliceai_pipeline/output'
         fasta_file            => $self->o('fasta_file'), # '/hps/nobackup2/production/ensembl/dlemos/files/Homo_sapiens.GRCh38.dna.toplevel.fa'
         gene_annotation       => $self->o('gene_annotation'), # '/homes/dlemos/work/tools/SpliceAI_files_output/gene_annotation/ensembl_gene/grch38_MANE_8_7.txt'
         # step_size             => 100_000,
         step_size             => 50,
-        output_file_name      => 'spliceai_scores_chr',
+        output_file_name      => 'spliceai_scores_',
 
         pipeline_wide_analysis_capacity => 80,
 
@@ -77,9 +79,12 @@ sub resource_classes {
     my ($self) = @_;
     return {
         %{$self->SUPER::resource_classes},
-        'default' => { 'LSF' => '-n 16 -q production-rh74 -R"select[mem>4000] rusage[mem=4000]" -M4000'},
-        'medium'  => { 'LSF' => '-n 16 -q production-rh74 -R"select[mem>6000] rusage[mem=6000]" -M6000'},
-        'high'    => { 'LSF' => '-n 16 -q production-rh74 -R"select[mem>8500] rusage[mem=8500]" -M8500'},
+        # 'default' => { 'LSF' => '-n 16 -q production-rh74 -R"select[mem>4000] rusage[mem=4000]" -M4000'},
+        # 'medium'  => { 'LSF' => '-n 16 -q production-rh74 -R"select[mem>6000] rusage[mem=6000]" -M6000'},
+        # 'high'    => { 'LSF' => '-n 16 -q production-rh74 -R"select[mem>8500] rusage[mem=8500]" -M8500'},
+        'default' => { 'LSF' => '-q production-rh74 -R"select[mem>4000] rusage[mem=4000]" -M4000'},
+        'medium'  => { 'LSF' => '-q production-rh74 -R"select[mem>6000] rusage[mem=6000]" -M6000'},
+        'high'    => { 'LSF' => '-q production-rh74 -R"select[mem>8500] rusage[mem=8500]" -M8500'},
     };
 }
 
@@ -105,8 +110,9 @@ sub pipeline_analyses {
         -module => 'Bio::EnsEMBL::Variation::Pipeline::SpliceAI::SplitFiles',
         -analysis_capacity => $self->o('pipeline_wide_analysis_capacity'),
         -parameters => {
-          'main_dir'              => $self->o('main_dir'),
           'input_dir'             => $self->o('input_dir'),
+          'tmp_splited_vcf_dir'   => $self->o('tmp_splited_vcf_dir'),
+          'splited_vcf_dir'       => $self->o('splited_vcf_input_dir'),
           'output_dir'            => $self->o('tmp_output_dir'),
           'step_size'             => $self->o('step_size'),
         },
@@ -114,12 +120,12 @@ sub pipeline_analyses {
       { -logic_name => 'get_chr_dir',
         -module => 'Bio::EnsEMBL::Hive::RunnableDB::JobFactory',
         -parameters => {
-          'input_dir' => $self->o('main_dir') . '/splited_vcf_input',
+          'input_dir' => $self->o('splited_vcf_input_dir'),
           'inputcmd'  => 'ls #input_dir#',
         },
         -flow_into => { 
           '2->A' => {'init_spliceai' => {'input_chr_dir' => '#_0#'}},
-          'A->1' => ['init_finish_files'],
+          'A->1' => ['init_merge_files'],
         },
       },
       {   -logic_name => 'init_spliceai',
@@ -138,29 +144,40 @@ sub pipeline_analyses {
         -analysis_capacity => $self->o('pipeline_wide_analysis_capacity'),
         -parameters => {
           'main_dir'              => $self->o('main_dir'),
-          'vcf_input_dir'         => $self->o('main_dir') . '/splited_vcf_input',
+          'splited_vcf_input_dir' => $self->o('splited_vcf_input_dir'),
           'output_dir'            => $self->o('tmp_output_dir'),
           'fasta_file'            => $self->o('fasta_file'),
           'gene_annotation'       => $self->o('gene_annotation'),
           'output_file_name'      => $self->o('output_file_name'),
         },
       },
-      { -logic_name => 'init_finish_files',
+      { -logic_name => 'init_merge_files',
         -module => 'Bio::EnsEMBL::Hive::RunnableDB::JobFactory',
         -parameters => {
           'input_dir' => $self->o('tmp_output_dir'),
           'inputcmd'  => 'ls #input_dir#',
         },
         -flow_into => { 
-          1 => {'finish_files' => {'chr_dir' => '#_0#'}},
+          2 => {'merge_files' => {'chr_dir' => '#_0#'}},
+        },
+      },
+      { -logic_name => 'merge_files',
+        -module => 'Bio::EnsEMBL::Variation::Pipeline::SpliceAI::MergeFiles',
+        -parameters => {
+          'input_dir'             => $self->o('tmp_output_dir'),
+          'output_dir'            => $self->o('output_dir'),
+          'output_file_name'      => $self->o('output_file_name'),
+        },
+        -flow_into => { 
+          1 => ['finish_files'],
         },
       },
       { -logic_name => 'finish_files',
         -module => 'Bio::EnsEMBL::Variation::Pipeline::SpliceAI::FinishFiles',
         -parameters => {
+          'tmp_splited_vcf_dir'   => $self->o('tmp_splited_vcf_dir'),
+          'splited_vcf_input_dir' => $self->o('splited_vcf_input_dir'),
           'input_dir'             => $self->o('tmp_output_dir'),
-          'output_dir'            => $self->o('output_dir'),
-          'output_file_name'      => $self->o('output_file_name'),
         },
       }
   );

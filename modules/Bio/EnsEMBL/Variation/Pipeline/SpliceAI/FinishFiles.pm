@@ -31,18 +31,26 @@ package Bio::EnsEMBL::Variation::Pipeline::SpliceAI::FinishFiles;
 
 use strict;
 use warnings;
-use base ('Bio::EnsEMBL::Variation::Pipeline::BaseVariationProcess');
+use base ('Bio::EnsEMBL::Variation::Pipeline::SpliceAI::BaseMergeFiles');
 
 use FileHandle;
 
 sub run {
   my $self = shift;
-  my $input_dir = $self->param_required('input_dir');
-  my $chr_dir = $self->param_required('chr_dir');
-  my $output_dir = $self->param_required('output_dir');
-  my $output_file_name = $self->param_required('output_file_name');
+  $self->merge_vcf_files();
 }
 
+sub merge_vcf_files {
+  my $self = shift;
+  my $input_dir = $self->param_required('input_dir');
+  my $splited_input_dir = $self->param_required('splited_vcf_input_dir');
+  my $tmp_splited_vcf_dir = $self->param_required('tmp_splited_vcf_dir');
 
+  # Remove files
+  my ($exit_code, $stderr, $flat_cmd) = $self->run_system_command("rm -rf $input_dir");
+  my ($exit_code, $stderr, $flat_cmd) = $self->run_system_command("rm -rf $tmp_splited_vcf_dir");
+  my ($exit_code, $stderr, $flat_cmd) = $self->run_system_command("rm -rf $splited_input_dir");
+
+}
 
 1;
