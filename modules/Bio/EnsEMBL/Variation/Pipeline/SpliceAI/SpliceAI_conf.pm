@@ -79,12 +79,12 @@ sub resource_classes {
     my ($self) = @_;
     return {
         %{$self->SUPER::resource_classes},
-        # 'default' => { 'LSF' => '-n 16 -q production-rh74 -R"select[mem>4000] rusage[mem=4000]" -M4000'},
-        # 'medium'  => { 'LSF' => '-n 16 -q production-rh74 -R"select[mem>6000] rusage[mem=6000]" -M6000'},
-        # 'high'    => { 'LSF' => '-n 16 -q production-rh74 -R"select[mem>8500] rusage[mem=8500]" -M8500'},
-        'default' => { 'LSF' => '-q production-rh74 -R"select[mem>4000] rusage[mem=4000]" -M4000'},
-        'medium'  => { 'LSF' => '-q production-rh74 -R"select[mem>6000] rusage[mem=6000]" -M6000'},
-        'high'    => { 'LSF' => '-q production-rh74 -R"select[mem>8500] rusage[mem=8500]" -M8500'},
+        'default' => { 'LSF' => '-n 16 -q production-rh74 -R"select[mem>4000] rusage[mem=4000]" -M4000'},
+        'medium'  => { 'LSF' => '-n 16 -q production-rh74 -R"select[mem>6000] rusage[mem=6000]" -M6000'},
+        'high'    => { 'LSF' => '-n 16 -q production-rh74 -R"select[mem>8500] rusage[mem=8500]" -M8500'},
+        # 'default' => { 'LSF' => '-q production-rh74 -R"select[mem>4000] rusage[mem=4000]" -M4000'},
+        # 'medium'  => { 'LSF' => '-q production-rh74 -R"select[mem>6000] rusage[mem=6000]" -M6000'},
+        # 'high'    => { 'LSF' => '-q production-rh74 -R"select[mem>8500] rusage[mem=8500]" -M8500'},
     };
 }
 
