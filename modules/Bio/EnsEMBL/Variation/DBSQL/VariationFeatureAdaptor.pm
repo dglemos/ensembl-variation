@@ -2513,7 +2513,7 @@ sub fetch_by_spdi_notation{
   # Get a slice adaptor to enable check of supplied reference allele
   my $slice_adaptor = $user_slice_adaptor || $self->db()->dnadb()->get_SliceAdaptor(); 
   # Use fetch_by_region(undef, $sequence_id) to fetch LRG and NT regions
-  my $slice = $slice_adaptor->fetch_by_region($coord_system, $sequence_id) || $slice_adaptor->fetch_by_region(undef, $sequence_id, undef, undef, undef, undef, 1);
+  my $slice = $slice_adaptor->fetch_by_region($coord_system, $sequence_id, undef, undef, undef, undef, 1) || $slice_adaptor->fetch_by_region(undef, $sequence_id, undef, undef, undef, undef, 1);
 
   if(!ref($slice) || !$slice->isa('Bio::EnsEMBL::Slice')) {
     throw("Sequence name $raw_sequence_id not valid");
