@@ -59,7 +59,7 @@ sub split_vcf_file {
   my $self = shift;
   my $vcf_file = $self->param_required('vcf_file');
   my $tmp_split_vcf_dir = $self->param_required('tmp_split_vcf_dir');
-  my $input_dir = $self->param_required('input_dir');
+  my $input_dir = $self->param_required('input_directory');
   my $output_dir = $self->param_required('output_dir');
   my $step_size = $self->param_required('step_size');
   my $split_vcf_input_dir = $self->param_required('split_vcf_dir');
