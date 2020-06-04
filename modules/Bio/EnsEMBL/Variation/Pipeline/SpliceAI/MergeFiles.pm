@@ -42,7 +42,7 @@ sub run {
 
 sub merge_vcf_files {
   my $self = shift;
-  my $input_dir = $self->param_required('input_dir'); # tmp_output_dir
+  my $input_dir = $self->param_required('input_dir');
   my $chr_dir = $self->param_required('chr_dir');
   my $output_dir = $self->param_required('output_dir'); # output_dir
   my $output_file_name = $self->param_required('output_file_name');
