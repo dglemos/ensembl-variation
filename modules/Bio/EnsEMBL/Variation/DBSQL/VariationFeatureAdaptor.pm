@@ -2349,16 +2349,50 @@ sub get_reference{
   my @coords = defined($pos2) ? $tr_mapper->pep2genomic($pos, $pos2) : $tr_mapper->pep2genomic($pos, $pos);  
 
   my $start  = $coords[0]->start();
-  my $end    = $coords[0]->end();
+  my $end;
   my $strand = $coords[0]->strand();
 
-  my $seq_length = $type_del == 1 ? ($end-$start) + 1 : 3;  
+  my $is_multi_exon;
+  if(scalar(@coords) != 1 ) {
+    $is_multi_exon = 1;
+    $end = $coords[-1]->end();
+  }
+  else {
+    $end = $coords[0]->end();
+  }
 
   ## find reference sequence 
   my $slice = $transcript->slice();
 
-  ## make a small slice for sequence look-up
-  my $from_slice = Bio::EnsEMBL::Slice->new(-coord_system => $slice->coord_system(),
+  my $from_codon_ref;
+
+  if($is_multi_exon) {
+    # overwrite start - fake start
+    my $start_last = $coords[-1]->start();
+    my $length_0 = $coords[0]->end() - $coords[0]->start() + 1;
+    $start = $start_last - $length_0;
+
+    # check all coords
+    my $seq_length_multi;
+    foreach my $coord (@coords) {
+      $seq_length_multi = $coord->{'end'} - $coord->{'start'} + 1;
+
+      my $from_slice_multi = Bio::EnsEMBL::Slice->new(-coord_system => $slice->coord_system(),
+                                                      -start => $coord->{'start'},
+                                                      -end => $coord->{'end'},
+                                                      -strand => $slice->strand(),
+                                                      -seq_region_name => $slice->seq_region_name,
+                                                      -seq_region_length => $seq_length_multi,
+                                                      -adaptor => $slice->adaptor);
+
+      $from_codon_ref .= $from_slice_multi->seq();
+    }
+  }
+  else {
+    my $seq_length = $type_del == 1 ? ($end-$start) + 1 : 3;  
+
+    ## make a small slice for sequence look-up
+    my $from_slice = Bio::EnsEMBL::Slice->new(-coord_system => $slice->coord_system(),
                                               -start => $start,
                                               -end => $end,
                                               -strand => $slice->strand(),
@@ -2366,8 +2400,9 @@ sub get_reference{
                                               -seq_region_length => $seq_length, 
                                               -adaptor => $slice->adaptor); 
 
-  my $from_codon_ref = $from_slice->seq(); 
-  
+    $from_codon_ref = $from_slice->seq(); 
+  }
+
   ## correct for strand
   reverse_comp(\$from_codon_ref) if $strand <0; 
   
