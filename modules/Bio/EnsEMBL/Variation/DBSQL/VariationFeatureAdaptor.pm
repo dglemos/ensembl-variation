@@ -1867,7 +1867,7 @@ sub fetch_by_hgvs_notation {
 
     my ($highest_cs) = @{$self->db->get_CoordSystemAdaptor->fetch_all()};
     my $coord_system = $highest_cs->name();
-        
+       
     ## grab reference allele; second call after "||" allows for LRG regions to be fetched
     $slice = $slice_adaptor->fetch_by_region($coord_system, $reference ) || $slice_adaptor->fetch_by_region(undef, $reference);
     $strand =1; ## strand should be genome strand for HGVS genomic notation
@@ -2494,8 +2494,9 @@ sub fetch_by_spdi_notation{
   elsif($count_separator < 3){ throw ("Could not parse the SPDI notation $spdi. Too few elements present"); } 
 
   my $raw_sequence_id = $sequence_id;
-  # strip version number from reference 
-  if($sequence_id =~ m/\./i){
+  # strip version number from reference (only LRG and NT)
+  # NC_ should have a version number, example for mouse: NC_000068.8:3115317:T:C
+  if($sequence_id =~ m/\./i && ($sequence_id =~ m/^LRG/i || $sequence_id =~ m/^NT/i)){
     $sequence_id =~ s/\.\d+//g;
   } 
 
@@ -2620,7 +2621,7 @@ sub get_reference_allele{
   } 
 
   my $re_allele = $slice->seq(); 
-    
+
   return $re_allele;    
 }
 
