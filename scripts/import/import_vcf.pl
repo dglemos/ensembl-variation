@@ -50,11 +50,12 @@ use Getopt::Long;
 use FileHandle;
 use Socket;
 use IO::Handle;
-use Data::Dumper;
 use Time::HiRes qw(gettimeofday tv_interval);
 use ImportUtils qw(load);
 use Digest::MD5 qw(md5_hex);
 use Cwd 'abs_path';
+
+use Data::Dumper;
 
 use constant DISTANCE => 100_000;
 use constant MAX_SHORT => 2**16 -1;
@@ -162,6 +163,7 @@ sub configure {
 		
 		'cache=s',
 		'fasta=s',
+                'chr_synonyms=s',
 		
 	# die if we can't parse arguments - better to get user to sort out their command line
 	# than potentially do the wrong thing
@@ -477,7 +479,9 @@ sub main {
 	
 	# log start time
 	my $start_time = time();
-	
+
+        # open file to write variants that are skipped
+        # open(FH, '>', "/homes/dlemos/work/mastermind/variants_skip.txt") or die $!;	
 	
 	# SET UP VARIABLES
 	##################
@@ -554,7 +558,12 @@ sub main {
 	}
 	
 	die("ERROR: seq_region not populated\n") unless scalar keys %{$config->{seq_region_ids}};
-	
+
+        # Open chromosome synonyms file
+        if(defined($config->{chr_synonyms})) {
+          $config->{chr_synonyms_list} = read_chr_synonyms($config);
+        }
+
 	# get/set source_id
 	die("ERROR: no source specified\n") if !(defined $config->{source}) && !defined($config->{only_existing});
 	$config->{source_id} = get_source_id($config) unless defined($config->{only_existing});
@@ -623,7 +632,7 @@ sub main {
 		my @split = split /\s+/;
 		my $data = {};
 		$data->{line} = $_;
-		
+	
 		# column definition line
 		if(/^#/) {
 			%headers = %{parse_header($config, \@split)};
@@ -686,7 +695,7 @@ sub main {
 				
 				next;
 			}
-			
+		
 			# check we're not skipping loads in a row
 			if($last_skipped > 100 && $last_skipped =~ /(5|0)00$/) {
 				debug($config, "WARNING: Skipped last $last_skipped variants, are you sure this is running OK? Maybe --gp is enabled when it shouldn't be, or vice versa?");
@@ -715,7 +724,7 @@ sub main {
 			
 			# use VEP's parse_line to get a skeleton VF
 			($data->{tmp_vf}) = @{parse_line($config, $data->{line})};
-			
+		
 			if(!defined($data->{tmp_vf})) {
 				$config->{skipped}->{could_not_parse}++;
 				$last_skipped++;
@@ -731,15 +740,20 @@ sub main {
           next;
         }
       }
-			
-			if(!defined($config->{seq_region_ids}->{$data->{tmp_vf}->{chr}})) {
+	
+      my $chromosome = $data->{tmp_vf}->{chr};
+      if(defined($config->{chr_synonyms_list})) {
+        $chromosome = $config->{chr_synonyms_list}->{$data->{tmp_vf}->{chr}};
+      }
+
+			if(!defined($config->{seq_region_ids}->{$chromosome})) {
 				$config->{skipped}->{missing_seq_region}++;
 				$last_skipped++;
 				next;
 			}
 			
 			# copy seq region ID
-			$data->{tmp_vf}->{seq_region_id} = $config->{seq_region_ids}->{$data->{tmp_vf}->{chr}};
+			$data->{tmp_vf}->{seq_region_id} = $config->{seq_region_ids}->{$chromosome};
 			
 			# could be a structural variation feature
 			next unless $data->{tmp_vf}->isa('Bio::EnsEMBL::Variation::VariationFeature');
@@ -774,12 +788,18 @@ sub main {
       elsif(defined($config->{ss_ids}) && defined($data->{SS_ID})) {
         $data->{ID} = 'ss'.$data->{SS_ID};
       }
-			
+
+      my $var_name = $data->{info}->{HGVSG};
+      $var_name =~ s/,.*//;
+
+      if(length($data->{ALT}) > 50 || length($data->{REF}) > 50) {
+        print "SKIP: $var_name\n";
+        next;
+      }
+	
 			# make a var name if none exists
 			if(!defined($data->{ID}) || $data->{ID} eq '.' || defined($config->{create_name})) {
-				$data->{ID} =
-					($config->{var_prefix} ? $config->{var_prefix} : 'tmp').
-					'_'.$data->{'#CHROM'}.'_'.$data->{POS}.'_'.$data->{REF}.'_'.$data->{ALT};
+				$data->{ID} = $var_name;
 				$data->{made_up_name} = 1;
 			}
 			
@@ -965,6 +985,8 @@ sub main {
 		debug($config, (defined($config->{forked}) ? "SKIPPED\t" : "").$key.(' ' x (($max_length - length($key)) + 4)).$config->{skipped}->{$key});
 	}
 	
+        # close(FH);
+
 	store_session($config, "FINISHED");
 	
 	debug($config, "Finished!".(defined($config->{forked}) ? " (".$config->{forked}.")" : ""));
@@ -1538,8 +1560,10 @@ sub attrib {
 # copies seq_region entries from core DB
 sub copy_seq_region_from_core {
 	my $config = shift;
-	
-	debug($config, "Attempting to copy seq_region entries from core DB");
+
+	if(defined($config->{test})) {
+	  debug($config, "Attempting to copy seq_region entries from core DB");
+        }
 	
 	my $cdba = $config->{reg}->get_DBAdaptor($config->{species},'core') or return {};
 	my $dbh  = $cdba->dbc->db_handle;
@@ -1598,7 +1622,7 @@ sub parse_header {
 			delete $config->{tables}->{$_} foreach qw(compressed_genotype_region compressed_genotype_var);
 		}
 	}
-	
+
 	return \%headers;
 }
 
@@ -1993,11 +2017,13 @@ sub variation_feature {
 	
 	# get VF entries either from variation object or VCF locus
 	my $existing_vfs = [];
-  
+
+  my $chromosome = $config->{chr_synonyms_list}->{$vf->{chr}};
+ 
   $existing_vfs = $var_in_db ?
 		$vfa->fetch_all_by_Variation($data->{variation}) :
 		$vfa->_fetch_all_by_coords(
-			$config->{seq_region_ids}->{$vf->{chr}},
+			$config->{seq_region_ids}->{$chromosome},
 			$vf->{start},
 			$vf->{end},
 			$config->{somatic}
@@ -2362,7 +2388,14 @@ sub allele {
 				population => $pop,
 				variation  => $data->{variation}
 			});
-			
+	
+                        # print "ALLELE: ", $alleles[$i], " LENGTH: ", (length($alleles[$i])), "\n";
+	
+                        #if(length($alleles[$i]) >= 8000) {
+                        #  print "SKIP!!\n";
+                        #  next;
+                        #}
+	
 			if(defined($config->{test})) {
 				debug($config, "(TEST) Writing allele object for variation ", $data->{variation}->name, ", allele ", $alleles[$i], ", population ", $pop_name, " freq ", (@freqs ? $freqs[$i] : "?"));
 			}
@@ -2416,12 +2449,14 @@ sub allele {
 		
 		@objs = @final_objs;
 	}
+
+        if(@objs) {
+	  $config->{allele_adaptor}->store_multiple(\@objs) unless defined($config->{test});
+	  #my $fh = get_tmp_file_handle($config, 'allele');
+	  #$config->{allele_adaptor}->store_to_file_handle($_, $fh) for @objs;
 	
-	$config->{allele_adaptor}->store_multiple(\@objs) unless defined($config->{test});
-	#my $fh = get_tmp_file_handle($config, 'allele');
-	#$config->{allele_adaptor}->store_to_file_handle($_, $fh) for @objs;
-	
-	$config->{rows_added}->{allele} += scalar @objs;
+	  $config->{rows_added}->{allele} += scalar @objs;
+        }
 }
 
 
@@ -2786,6 +2821,29 @@ sub print_file{
 			$config->{rows_added}->{compressed_genotype_region}++;
 		}
 	}
+}
+
+sub read_chr_synonyms {
+  my $config = shift;
+
+  my %chr_synonyms_list;
+
+  my $seq_region = $config->{seq_region_ids};
+
+  my $file = $config->{chr_synonyms};
+
+  open(my $fh, '<:encoding(UTF-8)', $file)
+    or die "Could not open file '$file' $!";
+
+  while (my $row = <$fh>) {
+    chomp $row;
+    my ($chr1, $chr2) = split /\t/, $row;
+    if($seq_region->{$chr1} && $chr2 =~ /^NC/) {
+      $chr_synonyms_list{$chr2} = $chr1;
+    }
+  }
+
+  return \%chr_synonyms_list;
 }
 
 # prints usage message
