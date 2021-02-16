@@ -2446,9 +2446,20 @@ sub reset_consequence_data {
 sub get_var_synonyms {
   my $self = shift;
 
-  my %synonyms;
+  my @synonyms;
 
-  my $variation_id = $self->get_Variation_dbID();
+  my $variation_id;
+  if($self->get_Variation_dbID()) {
+    $variation_id = $self->get_Variation_dbID();
+  }
+
+  if(!$variation_id &&  defined($self->{existing}) && scalar @{$self->{existing}}) {
+    foreach my $e (@{$self->{existing}}) {
+      if($e->{variation_name} =~ /^rs/) {
+        $variation_id = $e->{variation_id};
+      }
+    }
+  }
 
   my $sth = $self->adaptor->dbc->prepare(qq{
     SELECT s.name, GROUP_CONCAT(vs.name ORDER BY vs.variation_id separator ',')
@@ -2465,10 +2476,10 @@ sub get_var_synonyms {
   my $raw_synonyms = $sth->fetchall_arrayref();
 
   foreach my $syn (@$raw_synonyms) {
-    $synonyms{$syn->[0]} = $syn->[1];
+    push(@synonyms, $syn->[0] . ': ' . $syn->[1]);
   }
 
-  return \%synonyms;
+  return \@synonyms;
 }
 
 1;
