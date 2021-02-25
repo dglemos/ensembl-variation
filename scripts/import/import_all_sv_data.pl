@@ -1,13 +1,13 @@
 #!/usr/bin/env perl
 # Copyright [1999-2015] Wellcome Trust Sanger Institute and the EMBL-European Bioinformatics Institute
 # Copyright [2016-2021] EMBL-European Bioinformatics Institute
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #      http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -73,7 +73,7 @@ my $f_count = 1;
 my $f_nb    = 1;
 if ($input_dir) {
   opendir(DIR, $input_dir) or die $!;
-  @files = readdir(DIR); 
+  @files = readdir(DIR);
   @files = sort(@files);
   close(DIR);
   $f_nb = (scalar(@files)-2);
@@ -143,7 +143,7 @@ my $temp_clin_table = "temp_sv_clin_sign$add";
 
 my $tmp_sv_col      = 'tmp_class_name';
 my $tmp_sv_clin_col = 'tmp_clinic_name';
-  
+
 # connect to databases
 Bio::EnsEMBL::Registry->load_all( $registry_file );
 my $cdb = Bio::EnsEMBL::Registry->get_DBAdaptor($species,'core');
@@ -183,7 +183,7 @@ pre_processing();
 
 foreach my $in_file (@files) {
   next if ($in_file !~ /\.gvf$/);
-  
+
   $in_file =~ /^(\w{4}\d+)_/;
   if ($study_to_skip{$1}) {
     debug("Study $1 (".$in_file.") skipped because it contains non ".$species." data");
@@ -268,25 +268,25 @@ debug(localtime()." All done!");
 # Load data into temp tables - temp_sv, temp_sv_phenotype
 sub load_file_data{
   debug(localtime()." Loading file into temporary table");
-  
+
   # drop any table that may be there
   $dbVar->do("DROP TABLE IF EXISTS $temp_table;");
   $dbVar->do("DROP TABLE IF EXISTS $temp_phen_table;");
-  
+
   my @cols = map { $attribs_col{$_}} @attribs;
   create_and_load($dbVar, "$temp_table", @cols);
-  
+
   # Move the 2nd file in $TMP_DIR/$TMP_FILE before loading the 2nd table
   `mv $TMP_DIR/$TMP_FILE\2 $TMP_DIR/$TMP_FILE`;
   create_and_load( $dbVar, "$temp_phen_table", "id *", "phenotype *");
-  
+
   # Fix nulls - after inserting in the temp tables some values need to be fixed
   if (($dbVar->selectrow_arrayref(qq{SELECT count(*) FROM $temp_table WHERE (outer_start=0 AND start=0 AND inner_start=0) OR (inner_end=0 AND end=0 AND outer_end=0);}))->[0] != 0) {
     warn "Structural variants with start and/or end coordinates equal to 0 found in the file!";
     $dbVar->do(qq{UPDATE $temp_table SET outer_start=outer_end, start=end, inner_start=inner_end WHERE outer_start=0 AND start=0 AND inner_start=0});
     $dbVar->do(qq{UPDATE $temp_table SET outer_end=outer_start, end=start, inner_end=inner_start WHERE outer_end=0 AND end=0 AND inner_end=0});
   }
-  
+
   foreach my $coord('outer_start', 'inner_start', 'inner_end', 'outer_end', 'start', 'end', 'bp_order') {
     $dbVar->do(qq{UPDATE $temp_table SET $coord = NULL WHERE $coord = 0;});
   }
@@ -296,7 +296,7 @@ sub load_file_data{
   }
 
   # Case with insertions
-  $dbVar->do(qq{UPDATE $temp_table SET start=outer_start, end=inner_start, 
+  $dbVar->do(qq{UPDATE $temp_table SET start=outer_start, end=inner_start,
                 outer_end=inner_start, inner_start=NULL, inner_end=NULL
                 WHERE outer_start=outer_end AND inner_start=inner_end;});
 
@@ -401,7 +401,7 @@ sub study_table{
 
   $stmt = qq{ SELECT st.study_id, st.description, st.external_reference FROM study st, source s
               WHERE s.source_id=st.source_id AND s.name='$source_name' and st.name='$study'};
-  my $rows = $dbVar->selectall_arrayref($stmt);    
+  my $rows = $dbVar->selectall_arrayref($stmt);
 
   my $assembly_desc;
 
@@ -507,16 +507,16 @@ sub structural_variation {
       t.alias,
       t.copy_number
     FROM
-      $temp_table t 
+      $temp_table t
       LEFT JOIN attrib a1 ON (t.type=a1.value)
   };
   $dbVar->do($stmt);
 }
 
 # Failed structural variations
-sub failed_structural_variation   {  
+sub failed_structural_variation   {
   debug(localtime()." Inserting into $sv_failed table for SVs");
-  
+
   my $stmt = qq{
     INSERT IGNORE INTO
     $sv_failed (
@@ -531,15 +531,15 @@ sub failed_structural_variation   {
       $temp_table t
     WHERE
       sv.variation_name=t.id AND
-      t.is_ssv=0 AND 
+      t.is_ssv=0 AND
       (t.is_failed!=0 OR t.chr NOT IN (SELECT name FROM seq_region))
   };
   $dbVar->do($stmt);
-  
-  
+
+
   # Failed supporting structural variations
   debug(localtime()." Inserting into $sv_failed table for SSVs");
-  
+
   $stmt = qq{
     INSERT IGNORE INTO
     $sv_failed (
@@ -554,7 +554,7 @@ sub failed_structural_variation   {
       $temp_table t
     WHERE
       sv.variation_name=t.id AND
-      t.is_ssv=1 AND 
+      t.is_ssv=1 AND
       (t.is_failed!=0 OR t.chr NOT IN (SELECT name FROM seq_region))
   };
   $dbVar->do($stmt);
@@ -563,7 +563,7 @@ sub failed_structural_variation   {
 # Structural variation features & supporting structural variation features
 sub structural_variation_feature {
   debug(localtime()." Inserting into $svf_table table");
-  
+
   my $stmt = qq{
     INSERT IGNORE INTO $svf_table (
       seq_region_id,
@@ -645,13 +645,13 @@ sub structural_variation_association {
   $dbVar->do($stmt);
 }
 
-# Somatic study processing  
-sub somatic_study_processing {  
+# Somatic study processing
+sub somatic_study_processing {
   # UPDATE breakpoint_order to 1 when more than one SVF and no breakpoint order
   my $stmt = qq{
-      SELECT distinct sv.structural_variation_id, count(svf.structural_variation_feature_id) svfc 
-      FROM $sv_table sv, $svf_table svf 
-      WHERE sv.structural_variation_id=svf.structural_variation_id 
+      SELECT distinct sv.structural_variation_id, count(svf.structural_variation_feature_id) svfc
+      FROM $sv_table sv, $svf_table svf
+      WHERE sv.structural_variation_id=svf.structural_variation_id
         AND sv.study_id=$study_id
         AND sv.somatic=1
         AND svf.breakpoint_order is null
@@ -662,9 +662,9 @@ sub somatic_study_processing {
     my $id = $sv_id->[0];
     $dbVar->do(qq{UPDATE $svf_table SET breakpoint_order=1 WHERE structural_variation_id=$id AND somatic=1});
   }
-    
+
   # Move alias from SSV to SV
-  $stmt = qq{ 
+  $stmt = qq{
       UPDATE $sv_table sv, $sv_table ssv, $sva_table sva SET sv.alias=ssv.alias
       WHERE sv.structural_variation_id=sva.structural_variation_id
         AND ssv.structural_variation_id=sva.supporting_structural_variation_id
@@ -681,19 +681,19 @@ sub somatic_study_processing {
 
 sub structural_variation_set {
   debug(localtime()." Inserting into $set_table table");
-  
+
   my $stmt;
   my @var_set_list;
-  
+
   if ($var_set_id eq '1kg_3') {
-  
+
     my %pop_1kg_p1 = (
       'ASW' => 'AFR', 'LWK' => 'AFR', 'YRI' => 'AFR',                                      # AFR
       'CLM'  => 'AMR', 'PEL'  => 'AMR', 'PUR'  => 'AMR', 'MXL'  => 'AMR',                  # AMR
       'CEU'  => 'EUR', 'TSI'  => 'EUR', 'FIN'  => 'EUR', 'GBR'  => 'EUR', 'IBS'  => 'EUR', # EUR
       'CHB'  => 'ASN', 'JPT'  => 'ASN', 'CHS'  => 'ASN', 'CDX'  => 'ASN', 'KHV'  => 'ASN', # ASN
     );
-    
+
     while (my($sub_pop, $sup_pop) = each (%pop_1kg_p1)) {
       $dbVar->do(qq{UPDATE $temp_table SET population='$sup_pop' WHERE population='$sub_pop'});
     }
@@ -801,20 +801,20 @@ sub structural_variation_set {
         t.id=sv.variation_name
     };
     $dbVar->do($stmt);
-    
+
     push(@var_set_list,$var_set_id);
-  }  
-  
+  }
+
   my $set_id_list = join(',',@var_set_list);
 
   # Populate the meta table
-  my $sets = $dbVar->selectall_arrayref(qq{SELECT vs.name,a.value FROM variation_set vs, attrib a 
+  my $sets = $dbVar->selectall_arrayref(qq{SELECT vs.name,a.value FROM variation_set vs, attrib a
                                           WHERE vs.variation_set_id IN ('$set_id_list')
                                           AND a.attrib_id=vs.short_name_attrib_id});
-  foreach my $set (@$sets) {                
-    my $meta_value = "sv_set#".$set->[0]."#".$set->[1]; 
+  foreach my $set (@$sets) {
+    my $meta_value = "sv_set#".$set->[0]."#".$set->[1];
     # Check if the meta entry already exists, else it create the entry
-    if (!$dbVar->selectrow_arrayref(qq{SELECT meta_id FROM meta WHERE meta_key='web_config' 
+    if (!$dbVar->selectrow_arrayref(qq{SELECT meta_id FROM meta WHERE meta_key='web_config'
                                        AND meta_value='$meta_value'})) {
       $dbVar->do(qq{INSERT INTO meta (meta_key,meta_value) VALUES ('web_config','$meta_value')});
     }
@@ -865,7 +865,7 @@ sub structural_variation_sample {
     }
   }
   # Create individual entries (not for mouse)
-  else { 
+  else {
     $stmt = qq{ SELECT DISTINCT subject, gender FROM $temp_table WHERE is_ssv=1 AND subject NOT IN (SELECT DISTINCT name from individual)};
     my $rows_subjects = $dbVar->selectall_arrayref($stmt);
     foreach my $row (@$rows_subjects) {
@@ -901,7 +901,7 @@ sub structural_variation_sample {
 
   my $ext1;
   my $ext2;
-  
+
   # For mouse
   if ($species =~ /mouse|mus/i) {
     $stmt = qq{
@@ -957,18 +957,18 @@ sub get_gender {
 
 sub phenotype_feature {
   my $stmt;
-  
+
   # Check if there is some phenotype entries
   $stmt = qq{ SELECT count(phenotype) FROM $temp_phen_table WHERE phenotype is not null };
   if (($dbVar->selectall_arrayref($stmt))->[0][0] == 0) {
     debug(localtime()." Inserting into $pf_table table skipped: no phenotype data for this study");
     return;
   }
-  
+
   debug(localtime()." Inserting into $pf_table table");
-  
+
   # Create phenotype entries
-  $stmt = qq{ SELECT DISTINCT phenotype FROM $temp_phen_table 
+  $stmt = qq{ SELECT DISTINCT phenotype FROM $temp_phen_table
               WHERE phenotype NOT IN (SELECT description FROM phenotype)
             };
   my $rows = $dbVar->selectall_arrayref($stmt);
@@ -982,9 +982,9 @@ sub phenotype_feature {
     $stmt_phenotype->execute($phenotype);
 
   }
-    
+
   $stmt = qq{
-    INSERT IGNORE INTO 
+    INSERT IGNORE INTO
     $pf_table (
       phenotype_id,
       object_id,
@@ -1007,11 +1007,11 @@ sub phenotype_feature {
       svf.seq_region_end,
       svf.seq_region_strand
     FROM
-      $temp_table t, 
+      $temp_table t,
       $temp_phen_table tp,
       $svf_table svf,
       phenotype p
-    WHERE 
+    WHERE
       svf.variation_name=t.id AND
       t.id=tp.id AND
       p.description=tp.phenotype
@@ -1029,25 +1029,25 @@ sub drop_tmp_table {
 
 sub parse_gvf {
   my $infile = shift;
-  
+
   debug(localtime()." Parse GVF file: $infile");
   debug(localtime()." Start mapping SV features to $target_assembly if needed") if $mapping;
-  
+
   open IN, $infile or die "Could not read from input file $infile\n";
-  
+
   # get a slice adaptor
   my $sa = Bio::EnsEMBL::Registry->get_adaptor($species, 'core', 'slice');
-  
+
   open OUT,  ">$TMP_DIR/$TMP_FILE" or die "Could not write to output file $TMP_DIR/$TMP_FILE\n";
   open OUT2, ">$TMP_DIR/$TMP_FILE\2" or die "Could not write to output file $TMP_DIR/$TMP_FILE\2\n";
-  
+
   my $header;
   my $assembly;
-  
+
   while(<IN>) {
-  
+
     my $current_line = $_;
-    
+
     ###### Header (Study) ######
     if ($current_line =~ /^#/) {
       while ($current_line =~ /^#/) {
@@ -1055,40 +1055,40 @@ sub parse_gvf {
         $header = get_header_info($current_line,$header);
         $current_line = <IN>;
       }
-      
+
       $assembly = parse_header($header);
       study_table($header);
     }
-  
+
     chomp ($current_line);
     my $line_info = parse_line($current_line);
 
     my $infos = check_breakpoint_coordinates($line_info);
-    
+
     my $is_failed = 0;
-    
-    
+
+
     foreach my $info (@$infos) {
-    
-      ###### Mapping work ######  
+
+      ###### Mapping work ######
       if ($mapping && $assembly !~ /$cs_version_number/) {
-        
+
         # get a slice on the old assembly
         my $slice;
         my $start_c = $info->{start};
         my $end_c   = $info->{end};
-  
+
         if (!$info->{start}) {
           $start_c = ($info->{outer_start}) ? $info->{outer_start} : $info->{inner_start};
         }
         if (!$info->{end}) {
           $end_c = ($info->{outer_end}) ? $info->{outer_end} : $info->{inner_end};
         }
-  
+
         if ($info->{chr}) {
           eval { $slice = $sa->fetch_by_region('chromosome', $info->{chr}, $start_c, $end_c, 1, $assembly); };
         }
-  
+
         # check got the slice OK
         if(!defined($slice)) {
            warn("Structural variant '".$info->{ID}."' (study ".$header->{study}."): Unable to map from assembly $assembly or unable to retrieve slice ".$info->{chr}."\:$start_c\-$end_c");
@@ -1100,55 +1100,55 @@ sub parse_gvf {
           my $count = 0;
           my ($min_start, $max_end) = (999999999, -999999999);
           my $to_chr;
-    
+
           # project the slice to the latest assembly
           # this may produce several "segments"
           foreach my $segment(@{$slice->project('chromosome', $target_assembly)}) {
-    
+
               # get the slice that this segment is on
             my $to_slice = $segment->to_Slice();
-    
+
             # check this segment is on the same chrom
             if((defined $to_chr) && ($to_chr ne $to_slice->seq_region_name)) {
               $count = 0;
               warn("Segments of ".$info->{ID}." map to different chromosomes ($to_chr and ", $to_slice->seq_region_name, ")");
               $is_failed = 2;
             }
-    
+
             # get the chromosome name
             $to_chr = $to_slice->seq_region_name;
-    
+
             # get the slice start and end
             my $to_start = $to_slice->start;
             my $to_end = $to_slice->end;
-    
+
             # now calculate the coords of the segment on the slice
             $to_start = ($to_start + $segment->from_start) - 1;
             $to_end = ($to_end + $segment->from_start) - 1;
-    
+
             # store the min/max
             $min_start = $to_start if $to_start < $min_start;
             $max_end = $to_end if $to_end > $max_end;
-    
+
             # print this segment
             #print "$id\t$chr\t$start\t$end\tsize ",($end - $start + 1), "\t\-\>\t", $to_chr, "\t", $to_start, "\t", $to_end, " size ", ($to_end - $to_start + 1), "\n";
-          
+
             $count++;
           }
-      
+
           #my $diff = abs(100 - (100 * (($end - $start + 1) / ($max_end - $min_start + 1))));
-  
+
           #print "Before ",($end - $start + 1), " After ", ($max_end - $min_start + 1), " Diff $diff count $count\n";
-  
+
           # allow gaps?
           if((($count - 1) <= $num_gaps && $count && !$is_failed)) {# && $diff < $size_diff) {
-          
+
             $num_mapped{$assembly}++ if (!$info->{is_ssv});
-        
+
             $info->{chr}   = $to_chr;
             $info->{start} = $min_start;
             $info->{end}   = $max_end;
-        
+
             # calculate inner/outer coords
             $info->{outer_start} = $min_start - ($start_c - $info->{outer_start}) if $info->{outer_start} >= 1;
             $info->{inner_start} = $min_start + ($info->{inner_start} - $start_c) if $info->{inner_start} >= 1;
@@ -1160,14 +1160,14 @@ sub parse_gvf {
             if (!$info->{is_ssv}) {
               warn ("Structural variant '".$info->{ID}."' (study ".$header->{study}.") has location '$assembly:".$info->{chr}.":$start_c\-$end_c' , which could not be re-mapped to $target_assembly. This variant will be labelled as failed");
               $num_not_mapped{$assembly}++;
-            }  
+            }
             $is_failed = 1;
           }
         }
       }
-    
+
       $info->{is_failed} = $is_failed;
-               
+
       my $data = generate_data_row($info);
 
       print OUT (join "\t", @{$data})."\n";
@@ -1184,7 +1184,7 @@ sub parse_gvf {
   close IN;
   close OUT;
   close OUT2;
-  
+
   if ($mapping && $assembly !~ /$cs_version_number/) {
     debug(localtime()." Finished SV mapping:\n\t\tSuccess: ".(join " ", %num_mapped)." not required $no_mapping_needed\n\t\tFailed: ".(join " ", %num_not_mapped)." (In no existing chromosome: $skipped)");
   }
@@ -1194,15 +1194,15 @@ sub parse_gvf {
 sub get_header_info {
   my $line = shift;
   my $h    = shift;
-  
+
   chomp($line);
   $line = decode_text($line);
-  
+
   my ($label, $info);
   # Example with more than one space: ##genome-build NCBI GRCh37
   if ($line =~ /^##/) {
     ($label, $info) = split(' ', $line);
-  } 
+  }
   elsif ($line =~ /\:/) {
     $line =~ /^(.+)\:\s+(.+)$/;
     $label = $1;
@@ -1222,7 +1222,7 @@ sub get_header_info {
   $label =~ s/#//g;
   $label =~ s/^\s//;
   $info  =~ s/^\s+//;
-  
+
   $h->{author}       = $info if ($label =~ /Display.+name/i);
   $h->{first_author} = $info if ($label =~ /First.+author/i);
   $h->{assembly}     = $info if ($label =~ /Assembly.+name/i);
@@ -1236,7 +1236,7 @@ sub get_header_info {
   if ($label =~ /Publication/i && $info !~ /Not.+applicable/i) {
     foreach my $pub (split(';',$info)) {
       my ($p_label,$p_info) = split('=',$pub);
-         
+
       push(@{$h->{pubmed}}, $p_info) if ($p_label =~ /PMID/i);
       push(@{$h->{year}}, $p_info) if ($p_label =~ /Publication.+year/i);
       $h->{desc} = $p_info if ($p_label =~ /Paper.+title/i && $p_info && $p_info ne 'None Given');
@@ -1274,12 +1274,12 @@ sub get_header_info {
       my ($key,$value) = split('=',$s_info);
       $sample  = $value if ($key eq 'sample_name');
       $subject = $value if ($key eq 'subject_name');
-      
+
       # Population (mouse)
       if ($key eq 'links' && $value =~ /^JAX:(.+)$/i) {
         $pop = $1;
-      } 
-      
+      }
+
       # Tissue (human)
       # In COSMIC: the file from 2015 has 'cell_type'; file from 2013 has 'sample_cell_type'
       if ($key eq 'sample_cell_type' || $key eq 'cell_type'){
@@ -1288,44 +1288,44 @@ sub get_header_info {
       }
     }
     $tissue = ($tissue ne 'NS') ? $tissue : undef;
-    
+
     # COSMIC phenotype
     if (defined($tissue) && ($h->{desc} =~ /cosmic/i || $h->{s_desc} =~ /cosmic/i)){
       $tissue = "COSMIC:tumour_site:$tissue";
     }
-    
-    
+
+
     if (defined($sample)) {
       $subject = defined($subject) ? $subject : $sample;
-      
+
       $samples{$sample}{subject}    = $subject;
       $samples{$sample}{tissue}     = $tissue;
       $samples{$sample}{gender}     = $subjects{$subject}->{subject_sex};
       $samples{$sample}{phenotype}  = $subjects{$subject}->{phenotype_description};
       $samples{$sample}{population} = $subjects{$subject}->{subject_population};
-      
+
       if (!defined($subjects{$subject}->{subject_population}) && $species =~ /mouse|mus.*mus/ && defined($pop)){
         $samples{$sample}{population} = $pop;
       }
     }
   }
-  
+
   # Subject information
   elsif ($label eq 'subject') {
     my %subject_data;
-    
+
     foreach my $s_info (split(';',$info)) {
       my ($key,$value) = split('=',$s_info);
       $subject_data{$key} = $value;
     }
-    
+
     $subject_data{subject_sex} = $subject_data{sex} if ($subject_data{sex});
     $subject_data{subject_population} = $subject_data{population} if ($subject_data{population});
-    
+
     if ($subject_data{subject_sex}) {
       $subject_data{subject_sex} = ($subject_data{subject_sex} =~ /^m/i) ? 'Male' : 'Female';
     }
-    
+
     my $subject = $subject_data{subject_name};
     if (defined($subject)) {
       $subjects{$subject} = \%subject_data;
@@ -1340,9 +1340,9 @@ sub get_header_info {
 
 sub parse_header {
   my $h = shift;
-  
+
   my $assembly = $h->{assembly};
-  
+
   if($species =~ /human|homo/) {
     # try to guess the source assembly
     if($assembly =~ /34/) {
@@ -1387,7 +1387,7 @@ sub parse_header {
     $assembly = 'BROADD2' if ($assembly =~ /2\.0/);
   }
   $h->{assembly} = $assembly;
-  
+
   return $assembly;
 }
 
@@ -1396,7 +1396,7 @@ sub parse_line {
   my @data     = split(/\t/, $line);
   my @last_col = split(';', pop(@data));
   my $info;
-  
+
   $data[0] =~ /Chr(.+)$/;
   $info->{chr} = defined($1) ? $1 : $data[0];
   $info->{SO_term} = ($data[2] eq 'alu_insertion') ? ucfirst($data[2]) : $data[2];
@@ -1415,12 +1415,12 @@ sub parse_line {
 
 sub get_seq_region {
   my $seq_region = shift;
-  
+
   # Check if the seq_region is in the main Core seq_region
   my $sth = $dbVar->prepare(qq{ SELECT name FROM seq_region WHERE name=?});
   $sth->execute($seq_region);
   my $seq_region_name = ($sth->fetchrow_array)[0];
-  
+
   # Look for synonyms
   if (!$seq_region_name) {
     $sth = $dbCore->prepare(qq{ SELECT seq.name FROM seq_region seq, seq_region_synonym syn WHERE syn.seq_region_id=seq.seq_region_id AND syn.synonym=?});
@@ -1428,7 +1428,7 @@ sub get_seq_region {
     $seq_region_name = ($sth->fetchrow_array)[0];
   }
   $sth->finish;
-  
+
   if ($seq_region_name) {
     $seq_regions{$seq_region} = $seq_region_name;
     return $seq_region_name;
@@ -1447,16 +1447,16 @@ sub parse_9th_col {
     my ($key,$value) = split('=',$inf);
 
     $info->{$key} = $value if ($key ne 'phenotype'); # Default
-    
+
     $info->{ID} = $value if ($key eq 'Name');
-    
+
     # Start range
     if ($key eq 'Start_range') {
       my @s_range = split(/,/, $value);
       if (scalar @s_range == 2) {
         $info->{outer_start} = $s_range[0] if ($s_range[0] ne '.');
         $info->{inner_start} = $s_range[1] if ($s_range[1] ne '.');
-      } 
+      }
     }
     # End range
     if ($key eq 'End_range') {
@@ -1466,7 +1466,7 @@ sub parse_9th_col {
         $info->{inner_end} = $e_range[0] if ($e_range[0] ne '.');
       }
     }
-    
+
     # Sample information
     if ($value !~ /Unknown/i) {
       if ($key eq 'sample_name' || ($key eq 'subject_name' && !$info->{sample})) {
@@ -1483,7 +1483,7 @@ sub parse_9th_col {
         }
         $info->{population}  = ($samples{$value}{population}) ? $samples{$value}{population} : undef; # 1000 Genomes study
         $info->{gender}      = ($samples{$value}{gender}) ? $samples{$value}{gender} : undef;
-        
+
         my $s_phenotype = ($samples{$value}{phenotype}) ? $samples{$value}{phenotype} : $samples{$value}{tissue};
         $info->{phenotype}{$s_phenotype} = 1;
       }
@@ -1507,7 +1507,7 @@ sub parse_9th_col {
     $info->{status}      = 'High quality' if ($key eq 'variant_region_description' && $value =~ /high.quality/i);
     $info->{alias}       = $value if ($key eq 'Alias' && $value !~ /^\d+$/);
     $info->{length}      = $value if ($key eq 'variant_call_length');
-    
+
     # Zygosity
     if ($key eq 'Zygosity') {
       if ($value eq 'heterozygous') {
@@ -1517,7 +1517,7 @@ sub parse_9th_col {
         $info->{zygosity} = 2;
       }
     }
-    
+
     # Copy number
     if ($key eq 'copy_number') {
       my $copy = (split(/[-,\.\~]/,$value))[0];
@@ -1530,7 +1530,8 @@ sub parse_9th_col {
       $info->{_bp_detail} = $value if ($key =~ /Breakpoint_detail/i);
       $info->{_bp_range}  = $value if ($key =~ /Breakpoint_range/i);
     }
-    
+
+    my $skip_phenotype;
     # Phenotype
     if ($key eq 'phenotype') {
       # The input is a string of multiple phenotypes separated by comma
@@ -1539,6 +1540,10 @@ sub parse_9th_col {
       # Example: '46,XX Testicular Disorders of Sex Development'
       if($value =~ /46,/) {
         $value =~ s/46,/46-/g;
+      }
+
+      if($value =~ /not_reported/ || $value =~ /not reported/) {
+        $skip_phenotype = 1;
       }
 
       $value =~ s/, /__/g;
@@ -1554,11 +1559,11 @@ sub parse_9th_col {
         $phe = replace_char($phe);
 
         $phe =~ s/__/, /g;
-        $info->{phenotype}{$phe} = 1;
+        $info->{phenotype}{$phe} = 1 unless $skip_phenotype;
       }
     }
-    $info->{phenotype}{$value} = 1 if ($key eq 'phenotype_description');
-    $info->{phenotype_link} = $value if ($key eq 'phenotype_link' || $key eq 'phenotype_id');
+    $info->{phenotype}{$value} = 1 if ($key eq 'phenotype_description' && !$skip_phenotype);
+    $info->{phenotype_link} = $value if (($key eq 'phenotype_link' || $key eq 'phenotype_id') && !$skip_phenotype);
 
     # Allele count and frequency
     if ($key eq 'allele_count') {
@@ -1627,8 +1632,8 @@ sub pre_processing {
 
   debug(localtime()." Prepare the structural variation tables by adding temporary keys and columns");
   debug(localtime()."\t - Add temporary unique keys in $svf_table and $svs_table tables");
-  
-  
+
+
   # Prepare the structural_variation_feature table
   if ($dbVar->do(qq{SHOW KEYS FROM $svf_table WHERE Key_name='name_coord_key';}) < 1){
     $dbVar->do(qq{ALTER TABLE $svf_table ADD CONSTRAINT  UNIQUE KEY
@@ -1638,18 +1643,18 @@ sub pre_processing {
   if ($dbVar->do(qq{SHOW KEYS FROM $svf_table WHERE Key_name='name_key';}) < 1){
     $dbVar->do(qq{ALTER TABLE $svf_table ADD KEY `name_key` (`variation_name`)});
   }
-  
+
   # Prepare the structural_variation_sample table
   if ($dbVar->do(qq{SHOW KEYS FROM $svs_table WHERE Key_name='sv_id_key';}) < 1){
     $dbVar->do(qq{ALTER TABLE $svs_table ADD CONSTRAINT UNIQUE KEY `sv_id_key` (`structural_variation_id`,`sample_id`)});
   }
-  
+
   # Prepare the individual table
   debug(localtime()."\t - Add temporary unique keys in the individual table");
   if ($dbVar->do(qq{SHOW KEYS FROM individual WHERE Key_name='name_key';}) < 1){
     $dbVar->do(qq{ALTER TABLE individual ADD KEY `name_key` (`name`)});
   }
-  
+
   # Prepare the sample table
   debug(localtime()."\t - Add temporary unique keys in the sample table");
   if ($dbVar->do(qq{SHOW KEYS FROM sample WHERE Key_name='name_key';}) < 1){
@@ -1657,46 +1662,46 @@ sub pre_processing {
   }
 
   debug(localtime()."\t - Add temporary columns in the $sv_table table");
-  
+
   if ($dbVar->do(qq{show columns from $sv_table like '$tmp_sv_col';}) != 1){
     $dbVar->do(qq{ALTER TABLE $sv_table ADD COLUMN $tmp_sv_col varchar(255);});
   }
-  
+
   if ($dbVar->do(qq{show columns from $sv_table like '$tmp_sv_clin_col';}) != 1){
     $dbVar->do(qq{ALTER TABLE $sv_table ADD COLUMN $tmp_sv_clin_col varchar(255);});
   }
-  
+
 }
 
 #### Post processing ####
 
 sub post_processing_annotation {
   debug(localtime()." Post processing of the table $svs_table");
-  
+
   my $stmt = qq{ DELETE FROM $svs_table WHERE sample_id IS NULL };
   $dbVar->do($stmt);
-  
+
   # Duplicate strains at the SV level (only for mouse)
   if ($species =~ /mouse|mus/i) {
     $stmt = qq{
-      INSERT IGNORE INTO $svs_table (structural_variation_id,sample_id) 
-      SELECT distinct sva.structural_variation_id,svs.sample_id FROM $svs_table svs, $sva_table sva, sample s 
+      INSERT IGNORE INTO $svs_table (structural_variation_id,sample_id)
+      SELECT distinct sva.structural_variation_id,svs.sample_id FROM $svs_table svs, $sva_table sva, sample s
       WHERE sva.supporting_structural_variation_id=svs.structural_variation_id AND s.sample_id=svs.sample_id
         AND s.display!='UNDISPLAYABLE'
     };
     $dbVar->do($stmt);
-  } 
+  }
 }
 
 sub post_processing_feature {
   debug(localtime()." Post processing of the table $svf_table");
-  
-  my $stmt_s = qq{ UPDATE $svf_table SET outer_start=NULL, inner_start=NULL 
+
+  my $stmt_s = qq{ UPDATE $svf_table SET outer_start=NULL, inner_start=NULL
                    WHERE outer_start=seq_region_start AND inner_start=seq_region_start
                  };
   $dbVar->do($stmt_s);
 
-  my $stmt_e = qq{ UPDATE $svf_table SET outer_end=NULL, inner_end=NULL 
+  my $stmt_e = qq{ UPDATE $svf_table SET outer_end=NULL, inner_end=NULL
                    WHERE outer_end=seq_region_end AND inner_end=seq_region_end
                  };
   $dbVar->do($stmt_e);
@@ -1707,9 +1712,9 @@ sub post_processing_feature {
 sub post_processing_sample {
   debug(localtime()." Post processing of the table individual");
   my $stmt;
-  
+
   # Sample
-  my $sth = $dbVar->prepare(qq{ SELECT s.sample_id, s.description, count(DISTINCT sv.study_id) c 
+  my $sth = $dbVar->prepare(qq{ SELECT s.sample_id, s.description, count(DISTINCT sv.study_id) c
                                 FROM $sv_table sv, $svs_table svs, sample s
                                 WHERE sv.structural_variation_id=svs.structural_variation_id AND s.sample_id=svs.sample_id
                                 GROUP BY svs.sample_id HAVING c>1
@@ -1725,7 +1730,7 @@ sub post_processing_sample {
 
   # Individual
   my $type = ($species =~ /mouse|mus/i) ? 'Strain' : 'Subject';
-  $sth = $dbVar->prepare(qq{ SELECT i.individual_id, i.description, count(DISTINCT sv.study_id) c 
+  $sth = $dbVar->prepare(qq{ SELECT i.individual_id, i.description, count(DISTINCT sv.study_id) c
                                 FROM $sv_table sv, individual i, $svs_table svs, sample s
                                 WHERE sv.structural_variation_id=svs.structural_variation_id AND s.sample_id=svs.sample_id
                                   AND s.individual_id=i.individual_id
@@ -1748,9 +1753,9 @@ sub post_processing_phenotype {
   $dbVar->do(q{OPTIMIZE TABLE phenotype});
 
   my $stmt;
-  
+
   $stmt = qq{
-    INSERT IGNORE INTO 
+    INSERT IGNORE INTO
     $pf_table (
       phenotype_id,
       object_id,
@@ -1777,26 +1782,26 @@ sub post_processing_phenotype {
       $svf_table svf,
       $sva_table sva,
       $pf_table pf1
-    WHERE 
+    WHERE
       svf.structural_variation_id=sva.structural_variation_id AND
       svf.is_evidence=0 AND
       sva.supporting_structural_variation_id=sv.structural_variation_id AND
       sv.is_evidence=1 AND
       sv.variation_name=pf1.object_id AND
       pf1.type='SupportingStructuralVariation' AND
-      NOT EXISTS (SELECT pf2.phenotype_feature_id FROM $pf_table pf2 WHERE 
+      NOT EXISTS (SELECT pf2.phenotype_feature_id FROM $pf_table pf2 WHERE
                     pf2.object_id=svf.variation_name AND
                     pf2.phenotype_id=pf1.phenotype_id AND
                     pf2.source_id=svf.source_id AND
                     pf2.study_id=svf.study_id AND
-                    pf2.seq_region_id=svf.seq_region_id AND 
+                    pf2.seq_region_id=svf.seq_region_id AND
                     pf2.seq_region_start=svf.seq_region_start AND
                     pf2.seq_region_end=svf.seq_region_end AND
                     pf2.seq_region_strand=svf.seq_region_strand
                  )
   };
   $dbVar->do($stmt);
-}  
+}
 
 # Update clinical significances at the SV level (the clinical significance is defined at the SSV level)
 sub post_processing_clinical_significance {
@@ -1833,27 +1838,27 @@ sub post_processing_clinical_significance {
 # Unfail the variants which have at least one good mapping (e.g. Mapping to chromosome 14 'OK' and mapping to sequence NT_187600.1 'Not OK').
 sub post_processing_failed_variants {
   debug(localtime()." Post processing of the table $sv_failed: unflag the variants which have at least one entry in the $svf_table table");
-  
+
   my $stmt = qq{DELETE FROM $sv_failed WHERE structural_variation_id IN (SELECT structural_variation_id FROM $svf_table) and failed_description_id IN (17,18)};
-  
+
   $dbVar->do($stmt);
 }
 
 #### Finishing methods ####
 
 sub meta_coord{
-  
+
   debug(localtime()." Adding entries to meta_coord table");
-  
+
   # Structural variation feature
   my $max_length_ref = $dbVar->selectall_arrayref(qq{
     SELECT MAX(seq_region_end - seq_region_start + 1) FROM $svf_table
   });
   my $max_length = $max_length_ref->[0][0];
   if (!defined($max_length)) { $max_length = 0; }
-  
+
   my $cs = $default_cs->dbID;
-  
+
   $dbVar->do(qq{DELETE FROM meta_coord where table_name = '$svf_table';});
   $dbVar->do(qq{INSERT INTO meta_coord(table_name, coord_system_id, max_length) VALUES ('$svf_table', $cs, $max_length);});
 }
@@ -1884,7 +1889,7 @@ sub cleanup {
   # Drop a unique constraint in structural_variation_sample;
   $dbVar->do(qq{ALTER TABLE $svs_table DROP KEY sv_id_key});
   debug(localtime()."\t - Table $svs_table: cleaned");
-  
+
   # Drop a unique constraint in individual;
   $dbVar->do(qq{ALTER TABLE individual DROP KEY name_key});
   debug(localtime()."\t - Table individual: cleaned");
@@ -1894,7 +1899,7 @@ sub cleanup {
   debug(localtime()."\t - Table sample: cleaned");
 
   # structural_variation table
-  
+
   my $sv_flag = 0;
   # Column "tmp_class_name" in structural_variation
   my $sth1 = $dbVar->prepare(qq{ SELECT count(*) FROM $sv_table WHERE source_id=$source_id AND class_attrib_id=0});
@@ -1904,24 +1909,29 @@ sub cleanup {
   if ($sv_count != 0) {
     print STDERR "\tThe table $sv_table has $sv_count variants with no class_attrib_id defined!\nPlease, look at the column '$tmp_sv_col'\n";
     $sv_flag = 1;
-  } 
+  }
   else {
     $dbVar->do(qq{ALTER TABLE $sv_table DROP COLUMN $tmp_sv_col});
   }
-  
+
   # Column "tmp_clinic_name" in structural_variation
   my $sth2 = $dbVar->prepare(qq{ SELECT count(*) FROM $sv_table WHERE (clinical_significance is NULL OR clinical_significance = '') AND $tmp_sv_clin_col is not NULL});
   $sth2->execute();
   my $sv_clin_count = ($sth2->fetchrow_array)[0];
   $sth2->finish;
   if ($sv_clin_count != 0) {
-    print STDERR "\tThe table $sv_table has $sv_clin_count variants with clinical_significance values which don't match the authorized values!\nPlease, look at the column '$tmp_sv_clin_col'\n";
+    # Which terms are not supported?
+    my $sth_not_supported = $dbVar->prepare(qq{ SELECT distinct($tmp_sv_clin_col) FROM $sv_table WHERE (clinical_significance is NULL OR clinical_significance = '') AND $tmp_sv_clin_col is not NULL});
+    $sth_not_supported->execute();
+    my @clin_not_supported = $sth_not_supported->fetchrow_array;
+
+    print STDERR "\tThe table $sv_table has $sv_clin_count variants with clinical_significance values which don't match the authorized values! Please, look at the column '$tmp_sv_clin_col'. Terms not supported are: " . join (", ", @clin_not_supported) . "\n";
     $sv_flag = 1;
-  } 
+  }
   else {
     $dbVar->do(qq{ALTER TABLE $sv_table DROP COLUMN $tmp_sv_clin_col});
   }
-  
+
   debug(localtime()."\t - Table $sv_table: cleaned") if ($sv_flag == 0);
 
 }
@@ -1931,40 +1941,40 @@ sub cleanup {
 
 sub remove_data {
   my $study_id = shift;
-  
+
   debug(localtime()." Remove the structural variation data of this study");
 
   # structural_variation_sample
-  $dbVar->do(qq{ DELETE from $svs_table WHERE structural_variation_id IN 
+  $dbVar->do(qq{ DELETE from $svs_table WHERE structural_variation_id IN
                  (SELECT structural_variation_id FROM $sv_table WHERE study_id=$study_id);
             });
-  # structural_variation_association          
-  $dbVar->do(qq{ DELETE from $sva_table WHERE structural_variation_id IN 
-                 (SELECT structural_variation_id FROM $sv_table WHERE study_id=$study_id)
-            });  
-  # structural_variation_feature                  
-  $dbVar->do(qq{ DELETE from $svf_table WHERE structural_variation_id IN 
+  # structural_variation_association
+  $dbVar->do(qq{ DELETE from $sva_table WHERE structural_variation_id IN
                  (SELECT structural_variation_id FROM $sv_table WHERE study_id=$study_id)
             });
-  # variation_set_structural_variation          
-  $dbVar->do(qq{ DELETE from $set_table WHERE structural_variation_id IN 
+  # structural_variation_feature
+  $dbVar->do(qq{ DELETE from $svf_table WHERE structural_variation_id IN
                  (SELECT structural_variation_id FROM $sv_table WHERE study_id=$study_id)
-            });          
-  # phenotype_feature                  
+            });
+  # variation_set_structural_variation
+  $dbVar->do(qq{ DELETE from $set_table WHERE structural_variation_id IN
+                 (SELECT structural_variation_id FROM $sv_table WHERE study_id=$study_id)
+            });
+  # phenotype_feature
   $dbVar->do(qq{ DELETE from $pf_table WHERE study_id=$study_id });
   # failed_structural_variation
-  $dbVar->do(qq{ DELETE from $sv_failed WHERE structural_variation_id IN 
+  $dbVar->do(qq{ DELETE from $sv_failed WHERE structural_variation_id IN
                  (SELECT structural_variation_id FROM $sv_table WHERE study_id=$study_id)
             });
   # structural_variation
-  $dbVar->do(qq{ DELETE from $sv_table WHERE study_id=$study_id });                  
+  $dbVar->do(qq{ DELETE from $sv_table WHERE study_id=$study_id });
 }
 
 
 sub generate_data_row {
   my $info = shift;
   my $somatic = shift;
- 
+
   if(!defined($info->{bp_order})) {
     if ($info->{is_somatic} == 1 || $somatic) {
       $info->{bp_order} = 1;
@@ -1972,7 +1982,7 @@ sub generate_data_row {
       $info->{bp_order} = undef;
     }
   }
-  $info->{phenotype} = decode_text($info->{phenotype}) if($info->{phenotype}); 
+  $info->{phenotype} = decode_text($info->{phenotype}) if($info->{phenotype});
 
   my @row = map { $info->{$_} } @attribs;
 
@@ -1982,25 +1992,25 @@ sub generate_data_row {
 sub generate_phenotype_data_row {
   my $info      = shift;
   my $phenotype = shift;
-  
+
   my @row = ($info->{ID}, $phenotype);
-  
+
   return \@row;
 }
 
 
 sub check_breakpoint_coordinates {
   my $info = shift;
-  
+
   my @data = ($info);
 
   if (defined($info->{_bp_detail})) {
-  
+
     my %bp_info = %$info;
-  
+
     my ($chr,$pos,$strand) = split(':',$info->{_bp_detail});
     my ($start,$end) = split(',',$info->{_bp_range});
-    
+
     $bp_info{chr} = $chr;
     $bp_info{start} = (defined($start) && $start!=$pos) ? $start : $pos;
     $bp_info{end} = (defined($end) && $end!=$pos) ? $end : $pos;
@@ -2012,7 +2022,7 @@ sub check_breakpoint_coordinates {
     }
     push @data, \%bp_info;
   }
-  
+
   return \@data;
 }
 
@@ -2021,11 +2031,11 @@ sub check_breakpoint_coordinates {
 
 sub get_medgen_phenotype {
   my $id = shift;
-  
+
   return undef unless (-e $medgen_file && defined($id));
-  
+
   my $res = `grep $id $medgen_file`;
-  
+
   if ($res) {
     my $phen_desc;
     if ($res =~ /"(.+)"/) {
@@ -2046,16 +2056,16 @@ sub get_medgen_phenotype {
 
 sub get_hpo_phenotype {
   my $id = shift;
-  
+
   return undef unless (-e $hpo_file && defined($id));
-  
+
   my $res = `grep -A1 -w "id: $id" $hpo_file`;
-  
+
   if ($res) {
     $res =~ /name:\s(.+)$/;
     return $1 if ($1);
   }
-  
+
   return undef;
 }
 
