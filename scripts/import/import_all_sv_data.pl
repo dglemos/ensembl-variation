@@ -170,6 +170,7 @@ my $failed = [];
 my $study_id;
 my $somatic_study;
 my $fname;
+my $phenotype_data;
 
 my $source_id = source();
 
@@ -222,7 +223,6 @@ foreach my $in_file (@files) {
   $study_id;
   $somatic_study = 0;
 
-
   # Parsing
   parse_gvf($fname);
   load_file_data();
@@ -235,7 +235,13 @@ foreach my $in_file (@files) {
   somatic_study_processing() if ($somatic_study == 1);
   structural_variation_set() if ($var_set_id);
   structural_variation_sample();
-  phenotype_feature();
+
+  my $attrib_id;
+  if($phenotype_data) {
+    $attrib_id = get_attrib_id();
+  }
+  phenotype_feature($attrib_id);
+
   drop_tmp_table() if (!defined($debug));
   debug(localtime()." Done!\n");
 
@@ -955,7 +961,20 @@ sub get_gender {
   return $genders{$row};
 }
 
+# By default, attrib = 'trait'
+sub get_attrib_id {
+  my $stmt = $dbVar->prepare(qq { SELECT attrib_id FROM attrib WHERE value = 'trait' });
+  $stmt->execute() || die;
+  my $attrib_id = ($stmt->fetchrow_array)[0];
+
+  debug(localtime()." No attribute 'trait' was found in attrib table!\n") unless defined $attrib_id;
+
+  return $attrib_id;
+}
+
 sub phenotype_feature {
+  my $class_attrib_id = shift;
+
   my $stmt;
 
   # Check if there is some phenotype entries
@@ -978,8 +997,8 @@ sub phenotype_feature {
 
     $phenotype =~ s/'/\\'/g;
 
-    my $stmt_phenotype = $dbVar->prepare(qq[ INSERT INTO phenotype (description) VALUES (?) ]);
-    $stmt_phenotype->execute($phenotype);
+    my $stmt_phenotype = $dbVar->prepare(qq[ INSERT INTO phenotype (description, class_attrib_id) VALUES (?,?) ]);
+    $stmt_phenotype->execute($phenotype, $class_attrib_id);
 
   }
 
@@ -1542,7 +1561,7 @@ sub parse_9th_col {
         $value =~ s/46,/46-/g;
       }
 
-      if($value =~ /not_reported/ || $value =~ /not reported/) {
+      if($value =~ /not_reported/ || $value =~ /not reported/ || $value =~ /not specified/ || $value =~ /not_specified/ || $value =~ /not_provided/ || $value =~ /not provided/) {
         $skip_phenotype = 1;
       }
 
@@ -1559,6 +1578,7 @@ sub parse_9th_col {
         $phe = replace_char($phe);
 
         $phe =~ s/__/, /g;
+        $phenotype_data = 1;
         $info->{phenotype}{$phe} = 1 unless $skip_phenotype;
       }
     }
@@ -1934,6 +1954,13 @@ sub cleanup {
 
   debug(localtime()."\t - Table $sv_table: cleaned") if ($sv_flag == 0);
 
+  # Phenotypes
+  my $sth_pheno = $dbVar->prepare(qq{ SELECT count(*) FROM phenotype WHERE phenotype_id NOT IN (SELECT phenotype_id FROM phenotype_feature)});
+  $sth_pheno->execute() || die;
+  my $n_phenotype = ($sth_pheno->fetchrow_array)[0];
+  if($n_phenotype != 0) {
+    print STDERR "Warning: there are $n_phenotype phenotype entries with no phenotype_feature entry.\n";
+  }
 }
 
 
