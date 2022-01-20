@@ -45,7 +45,12 @@ sub run {
 
   # check new Mane transcripts
   if($check){
-    $self->get_new_transcripts();
+    if ($self->param('transcripts_from_file')) {
+      $self->get_new_transcripts_file();
+    }
+    else {
+      $self->get_new_transcripts_db();
+    }
     $self->check_split_vcf_file();
   }
   $self->split_vcf_file();
@@ -204,15 +209,17 @@ sub check_split_vcf_file {
   # Sort new vcf file
   my $vcf_file_subset = $vcf_file_path_subset . '/' . $vcf_file;
   my $vcf_file_subset_sorted = $vcf_file_path_subset . '/sorted_' . $vcf_file;
-  $self->run_system_command("sort -t \$'\t' -k1,1 -k2,2n $vcf_file_subset > $vcf_file_subset_sorted");
+  $self->run_system_command("sort -o $vcf_file_subset_sorted -k1,1 -k2,2n $vcf_file_subset");
   $self->run_system_command("mv $vcf_file_subset_sorted $vcf_file_subset");
 }
 
 # Check if there are new MANE transcripts since last release
-sub get_new_transcripts {
+sub get_new_transcripts_db {
   my $self = shift;
 
   my %new_transcripts;
+
+  print "HERE 1!!\n";
 
   my $registry = 'Bio::EnsEMBL::Registry';
   my $registry_file = $self->param('registry');
@@ -247,6 +254,37 @@ sub get_new_transcripts {
     }
   }
   $sth->finish();
+
+  $self->param('transcripts', \%new_transcripts);
+}
+
+sub get_new_transcripts_file {
+  my $self = shift;
+
+  print "HERE 2!!\n";
+
+  my $input_file = $self->param('transcripts_from_file');
+  open(my $read, '<:encoding(UTF-8)', $input_file) or die "Could not open file '$input_file' $!";
+
+  my %new_transcripts;
+
+  # File structure:
+  # chr transcript start  transcript end
+  while (my $row = <$read>) {
+    chomp $row;
+    next if($row =~ /^#/);
+
+    my ($chr, $transcript_start, $transcript_end) = split /\t/, $row;
+
+    if(!$new_transcripts{$chr}) {
+      my @positions;
+      push @positions, $transcript_start.'-'.$transcript_end;
+      $new_transcripts{$chr} = \@positions;
+    }
+    else {
+      push @{$new_transcripts{$chr}}, $transcript_start.'-'.$transcript_end;
+    }
+  }
 
   $self->param('transcripts', \%new_transcripts);
 }

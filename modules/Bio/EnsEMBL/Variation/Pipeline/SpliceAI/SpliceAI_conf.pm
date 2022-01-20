@@ -61,10 +61,11 @@ sub default_options {
         gene_annotation            => $self->o('gene_annotation'), # '/homes/dlemos/work/tools/SpliceAI_files_output/gene_annotation/ensembl_gene/grch38_MANE_8_7.txt'
         step_size                  => $self->o('step_size'), # number of variants used to split the main vcf files
         check_transcripts          => $self->o('check_transcripts'), # checks which are the new MANE transcripts for the last months, runs SpliceAI only for these ones
+        transcripts_from_file      => $self->o('transcripts_from_file'),
         registry                   => $self->o('registry'), # database where new MANE transcripts are going to be checked
         output_file_name           => 'spliceai_final_scores_',
 
-        pipeline_wide_analysis_capacity => 150,
+        pipeline_wide_analysis_capacity => 500,
 
         pipeline_db => {
             -host   => $self->o('hive_db_host'),
@@ -81,7 +82,7 @@ sub resource_classes {
     my ($self) = @_;
     return {
         %{$self->SUPER::resource_classes},
-        '4Gb_8c_job'  => {'LSF' => '-n 8 -q production-rh74 -R"select[mem>4000]  rusage[mem=4000]" -M4000' },
+        '4Gb_8c_job'  => {'LSF' => '-n 8 -q production-rh74 -R"select[mem>3000]  rusage[mem=3000]" -M3000' },
         '4Gb_job'     => {'LSF' => '-q production-rh74 -R"select[mem>4000] rusage[mem=4000]" -M4000'},
     };
 }
@@ -105,6 +106,7 @@ sub pipeline_analyses {
       { -logic_name => 'split_files',
         -module => 'Bio::EnsEMBL::Variation::Pipeline::SpliceAI::SplitFiles',
         -input_ids  => [],
+        -rc_name => '4Gb_job',
         -parameters => {
           'main_dir'                   => $self->o('main_dir'),
           'input_directory'            => $self->o('input_directory'),
@@ -114,6 +116,7 @@ sub pipeline_analyses {
           'step_size'                  => $self->o('step_size'),
           'check_transcripts'          => $self->o('check_transcripts'),
           'registry'                   => $self->o('registry'),
+          'transcripts_from_file'      => $self->o('transcripts_from_file'),
         },
       },
       { -logic_name => 'get_chr_dir',
@@ -168,6 +171,7 @@ sub pipeline_analyses {
       { -logic_name => 'merge_files',
         -module => 'Bio::EnsEMBL::Variation::Pipeline::SpliceAI::MergeFiles',
         -input_ids  => [],
+        -rc_name => '4Gb_job',
         -parameters => {
           'input_dir'        => $self->o('split_vcf_output_dir'),
           'output_dir'       => $self->o('output_dir'),
