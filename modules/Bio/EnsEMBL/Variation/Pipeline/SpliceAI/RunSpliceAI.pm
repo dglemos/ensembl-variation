@@ -67,7 +67,8 @@ sub run_spliceai {
     die("Directory ($output_vcf_files_dir) doesn't exist");
   }
 
-  my $cmd = "spliceai -I $vcf_input_dir_chr/$vcf_file -O $output_vcf_files_dir/$vcf_file -R $fasta_file -A $gene_annotation -M 1";
+  # my $cmd = "spliceai -I $vcf_input_dir_chr/$vcf_file -O $output_vcf_files_dir/$vcf_file -R $fasta_file -A $gene_annotation -M 1";
+  my $cmd = "spliceai -I $vcf_input_dir_chr/$vcf_file -O $output_vcf_files_dir/$vcf_file -R $fasta_file -A $gene_annotation";
   $self->run_system_command($cmd);
 
 }

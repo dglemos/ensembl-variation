@@ -60,8 +60,8 @@ sub default_options {
         fasta_file                 => $self->o('fasta_file'), # '/hps/nobackup2/production/ensembl/dlemos/files/Homo_sapiens.GRCh38.dna.toplevel.fa'
         gene_annotation            => $self->o('gene_annotation'), # '/homes/dlemos/work/tools/SpliceAI_files_output/gene_annotation/ensembl_gene/grch38_MANE_8_7.txt'
         step_size                  => $self->o('step_size'), # number of variants used to split the main vcf files
-        check_transcripts          => $self->o('check_transcripts'), # checks which are the new MANE transcripts for the last months, runs SpliceAI only for these ones
-        transcripts_from_file      => $self->o('transcripts_from_file'),
+        check_transcripts          => 0, # checks which are the new MANE transcripts for the last months, runs SpliceAI only for these ones
+        transcripts_from_file      => undef,
         registry                   => $self->o('registry'), # database where new MANE transcripts are going to be checked
         output_file_name           => 'spliceai_final_scores_',
 
@@ -82,8 +82,8 @@ sub resource_classes {
     my ($self) = @_;
     return {
         %{$self->SUPER::resource_classes},
-        '4Gb_8c_job'  => {'LSF' => '-n 8 -q production-rh74 -R"select[mem>3000]  rusage[mem=3000]" -M3000' },
-        '4Gb_job'     => {'LSF' => '-q production-rh74 -R"select[mem>4000] rusage[mem=4000]" -M4000'},
+        '6Gb_8c_job'  => {'LSF' => '-n 8 -q production -R"select[mem>6000]  rusage[mem=6000]" -M6000' },
+        '4Gb_job'     => {'LSF' => '-q production -R"select[mem>4000] rusage[mem=4000]" -M4000'},
     };
 }
 
@@ -147,7 +147,7 @@ sub pipeline_analyses {
         -hive_capacity => $self->o('pipeline_wide_analysis_capacity'),
         -analysis_capacity => $self->o('pipeline_wide_analysis_capacity'),
         -input_ids  => [],
-        -rc_name => '4Gb_8c_job',
+        -rc_name => '6Gb_8c_job',
         -parameters => {
           'main_dir'             => $self->o('main_dir'),
           'split_vcf_input_dir'  => $self->o('split_vcf_input_dir'),

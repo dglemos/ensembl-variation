@@ -219,7 +219,7 @@ sub get_new_transcripts_db {
 
   my %new_transcripts;
 
-  print "HERE 1!!\n";
+  # print "HERE 1!!\n";
 
   my $registry = 'Bio::EnsEMBL::Registry';
   my $registry_file = $self->param('registry');
@@ -234,7 +234,7 @@ sub get_new_transcripts_db {
                               JOIN attrib_type atr ON ta.attrib_type_id = atr.attrib_type_id
                               JOIN seq_region s ON t.seq_region_id = s.seq_region_id
                               JOIN gene g ON g.gene_id = t.gene_id
-                              WHERE t.stable_id like 'ENST%' and t.biotype = 'protein_coding' and atr.code = 'MANE_Select' and t.modified_date >= DATE_SUB(NOW(), INTERVAL 4 MONTH) });
+                              WHERE t.stable_id like 'ENST%' and t.biotype = 'protein_coding' and atr.code = 'MANE_Select' and t.modified_date >= DATE_SUB(NOW(), INTERVAL 10 MONTH) });
 
   $sth->execute();
   while (my $row = $sth->fetchrow_arrayref) {
@@ -261,7 +261,7 @@ sub get_new_transcripts_db {
 sub get_new_transcripts_file {
   my $self = shift;
 
-  print "HERE 2!!\n";
+  # print "HERE 2!!\n";
 
   my $input_file = $self->param('transcripts_from_file');
   open(my $read, '<:encoding(UTF-8)', $input_file) or die "Could not open file '$input_file' $!";
