@@ -82,7 +82,7 @@ sub resource_classes {
     my ($self) = @_;
     return {
         %{$self->SUPER::resource_classes},
-        '6Gb_8c_job'  => {'LSF' => '-n 8 -q production -R"select[mem>6000]  rusage[mem=6000]" -M6000' },
+        '6Gb_8c_job'  => {'LSF' => '-n 8 -q production -R"select[mem>8000]  rusage[mem=8000]" -M8000' },
         '4Gb_job'     => {'LSF' => '-q production -R"select[mem>4000] rusage[mem=4000]" -M4000'},
     };
 }
