@@ -238,6 +238,11 @@ sub update_variation{
       $l->[1]  =~ s/conflicting interpretations of pathogenicity/uncertain significance/g;
       #similar replace of 'association not found' to 'other'
       $l->[1]  =~ s/association not found/other/g;
+      $l->[1]  =~ s/likely risk allele/other/g;
+      $l->[1]  =~ s/established risk allele/other/g;
+      $l->[1]  =~ s/uncertain risk allele/other/g;
+      $l->[1]  =~ s/likely pathogenic,low penetrance/likely pathogenic/g;
+      $l->[1]  =~ s/pathogenic,low penetrance/pathogenic/g;
 	push @{$class{$l->[0]}}, $l->[1];
     }
 
