@@ -492,7 +492,12 @@ sub get_all_VariationFeatures_by_Slice {
         $desc = $val->{Description};
         $vcf_info_field = 'CLNSIG';
         last;
-      } 
+      }
+      elsif($val->{ID} eq 'AF'){
+        $desc = $val->{Description};
+        $vcf_info_field = 'AF';
+        last;
+      }
     }
     if ($vcf_info_field eq 'CSQ' or $vcf_info_field eq 'ANN'){
       my @description = split(/Format:/,$desc);
@@ -566,6 +571,11 @@ sub get_all_VariationFeatures_by_Slice {
               push @{ $vf->{clinical_significance} ||= [] }, $clnsig_var;
             }
           }
+        }
+      }
+      elsif ($vcf_info_field eq 'AF'){
+        foreach my $vf (@vfs) {
+          $vf->add_evidence_value('Frequency');
         }
       }
   }
