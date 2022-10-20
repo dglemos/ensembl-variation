@@ -88,7 +88,7 @@ use Bio::EnsEMBL::Variation::Individual;
 use Bio::EnsEMBL::Variation::Population;
 use Bio::EnsEMBL::Variation::VCFVariationFeature;
 use Bio::EnsEMBL::Variation::IntergenicVariation;
-use Bio::EnsEMBL::Variation::OverlapConsequence; 
+use Bio::EnsEMBL::Variation::OverlapConsequence;
 
 use base qw(Bio::EnsEMBL::Variation::BaseAnnotation);
 
@@ -499,7 +499,7 @@ sub get_all_VariationFeatures_by_Slice {
         last;
       }
     }
-    if ($vcf_info_field eq 'CSQ' or $vcf_info_field eq 'ANN'){
+    if ($vcf_info_field && $vcf_info_field eq 'CSQ' or $vcf_info_field eq 'ANN'){
       my @description = split(/Format:/,$desc);
       my @info_format = split('\|', $description[1]);
       foreach my $vf (@vfs) { 
@@ -549,7 +549,7 @@ sub get_all_VariationFeatures_by_Slice {
         }
         $vf->_finish_annotation();
       }
-    } elsif ($vcf_info_field eq 'CLNSIG'){
+    } elsif ($vcf_info_field && $vcf_info_field eq 'CLNSIG'){
        
         my $clinsig_list = $ATTRIBS{clinvar_clin_sig};
 
@@ -573,11 +573,15 @@ sub get_all_VariationFeatures_by_Slice {
           }
         }
       }
-      elsif ($vcf_info_field eq 'AF'){
-        foreach my $vf (@vfs) {
+
+      # Check if variants has frequency data
+      foreach my $vf (@vfs) {
+        my $info = $vf->{vcf_record}->get_info;
+        if($info->{'AF'}) {
           $vf->add_evidence_value('Frequency');
         }
       }
+
   }
   else {
 
