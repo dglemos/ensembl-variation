@@ -1675,25 +1675,17 @@ sub _parse_hgvs_transcript_position {
   my $tr_mapper = $transcript->get_TranscriptMapper();    
     
   if($DEBUG ==1){print "About to convert to genomic $start $end, ccs:". $transcript->cdna_coding_start() ."\n";}
-    #The mapper can only convert cDNA coordinates, but we have CDS (relative to the start codon), so we need to convert them
-    my ($cds_start, $cds_end) ;
-    if( defined $transcript->cdna_coding_start()){
-         ($cds_start, $cds_end)  = (($start + $transcript->cdna_coding_start() - ($start > 0)),($end + $transcript->cdna_coding_start() - ($end > 0)));
-    }
-    else{
-  #### non coding transcript
-        ($cds_start, $cds_end)  = ($start, $end);
-    }
-    # Convert the cDNA coordinates to genomic coordinates.
-    my @coords = $tr_mapper->cdna2genomic($cds_start,$cds_end);
+    # Convert the CDS coordinates to genomic coordinates.
+    my @coords = $tr_mapper->cds2genomic($start, $end);
 
     if($DEBUG ==1){
-      print "In parser: cdna2genomic coords: ". $coords[0]->start() . "-". $coords[0]->end() . " and strand ". $coords[0]->strand()." from $cds_start,$cds_end\n";}
-    
-    #Throw an error if we didn't get an unambiguous coordinate back
-    throw ("Unable to map the cDNA coordinates $start\-$end to genomic coordinates for Transcript " .$transcript->stable_id()) if (!$coords[0]->isa('Bio::EnsEMBL::Mapper::Coordinate'));
+      print "In parser: cds2genomic coords: ". $coords[0]->start() . "-". $coords[0]->end() . " and strand ". $coords[0]->strand()." from $start,$end\n";
+    }
 
-    my  $strand = $coords[0]->strand();
+    #Throw an error if we didn't get an unambiguous coordinate back
+    throw ("Unable to map the CDS coordinates $start\-$end to genomic coordinates for Transcript " .$transcript->stable_id()) if (!$coords[0]->isa('Bio::EnsEMBL::Mapper::Coordinate'));
+
+    my $strand = $coords[0]->strand();
 
     # Handle multi-exon location
     if(scalar(@coords) != 1){
@@ -1898,7 +1890,7 @@ sub fetch_by_hgvs_notation {
   }
          
   elsif($type =~ m/p/i) {
-  
+
     # throw a message for frameshifts  
     if($description =~ /[A-Za-z]+[0-9]+[A-Za-z]+fs/){
           throw("Frameshifts are not supported for HGVS protein input");
@@ -2230,7 +2222,6 @@ sub _pick_likely_transcript {
 ##    - assumes protein change results from minimum number of nucleotide changes
 ##    - returns VF information only if one minimal solution found
 sub _parse_hgvs_protein_position {
-
   my ($description, $reference, $transcript ) = @_;
   ## only parses hgvs substitutions [eg. Met213Ile] or delins [eg. 124delinsAla]
   my ($from, $pos, $to) = $description =~ /^([A-Za-z]+?)?(\d+)(?:delins)?(\w+|\*|\=|\?)$/;
